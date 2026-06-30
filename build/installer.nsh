@@ -217,15 +217,14 @@ Function MineradioUsePreferredInstallDir
     Call MineradioNormalizeInstallDir
     Pop $INSTDIR
   ${Else}
-    IfFileExists "D:\*.*" 0 +2
-    StrCpy $INSTDIR "D:\Mineradio"
+    StrCpy $INSTDIR "C:\Mineradio"
   ${EndIf}
 FunctionEnd
 
 Function MineradioNormalizeInstallDir
   Exch $0
   ${If} $0 == ""
-    StrCpy $0 "D:\Mineradio"
+    StrCpy $0 "C:\Mineradio"
     Exch $0
     Return
   ${EndIf}
@@ -316,7 +315,7 @@ Function MineradioWelcomeShow
   Pop $0
   SetCtlColors $0 "" "3257F7"
 
-  ${NSD_CreateLabel} 22u 96u 238u 24u "为这台电脑安装 Mineradio。默认安装到 D:\Mineradio；选择其它位置时会自动落入专用 Mineradio 子文件夹。"
+  ${NSD_CreateLabel} 22u 96u 238u 24u "为这台电脑安装 Mineradio。默认安装到 C:\Mineradio；选择其它位置时会自动落入专用 Mineradio 子文件夹。"
   Pop $0
   SendMessage $0 ${WM_SETFONT} $MineradioBodyFont 1
   SetCtlColors $0 "4B5263" "FFFFFF"
@@ -381,7 +380,7 @@ Function MineradioDirectoryShow
   SendMessage $0 ${WM_SETFONT} $MineradioSmallFont 1
   ${NSD_OnClick} $0 MineradioDirectoryBrowse
 
-  ${NSD_CreateLabel} 22u 122u 238u 12u "默认推荐：D:\Mineradio；选择现有文件夹会自动追加 Mineradio。"
+  ${NSD_CreateLabel} 22u 122u 238u 12u "默认推荐：C:\Mineradio；选择现有文件夹会自动追加 Mineradio。"
   Pop $0
   SendMessage $0 ${WM_SETFONT} $MineradioSmallFont 1
   SetCtlColors $0 "6B7280" "FFFFFF"
