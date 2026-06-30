@@ -1,0 +1,69 @@
+{
+  "name": "mineradio",
+  "productName": "Mineradio",
+  "version": "1.4.6",
+  "description": "接入用户本机 LX Music（落雪音乐）开放 API，实现读取并播放用户本机 LX Music 歌单的桌面音乐可视化工具。",
+  "author": "Mineradio contributors",
+  "license": "MIT",
+  "main": "desktop/main.js",
+  "homepage": "https://github.com/ww/Mineradio",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ww/Mineradio.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ww/Mineradio/issues"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "mineradio": {
+    "update": {
+      "provider": "github",
+      "owner": "ww",
+      "repo": "Mineradio",
+      "preview": true,
+      "preferMirrors": true,
+      "mirrors": [
+        "https://gh.llkk.cc/",
+        "https://ghfast.top/",
+        "https://gh-proxy.com/"
+      ]
+    }
+  },
+  "dependencies": {
+    "gsap": "^3.15.0",
+    "mpg123-decoder": "^1.0.3"
+  },
+  "devDependencies": {
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "com.mineradio.app",
+    "productName": "Mineradio",
+    "asar": false,
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "files": [
+      "desktop/**/*",
+      "public/**/*",
+      "server.js",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "include": "build/installer.nsh"
+    }
+  }
+}

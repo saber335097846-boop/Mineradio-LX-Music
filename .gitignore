@@ -1,0 +1,31 @@
+node_modules/
+dist/
+out/
+release/
+updates/
+*.log
+*.tmp
+*.bak
+
+# Electron / build output
+*.exe
+*.msi
+*.dmg
+*.AppImage
+*.asar
+
+# Local user data and caches
+MineradioCache/
+beatmaps/
+*.local
+.env
+.env.*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Historical local backups
+backup-*/
