@@ -1,4 +1,4 @@
-# Mineradio / MR
+# Mineradio - LX Music（落雪音乐）/ MR
 
 MR 是一个独立的桌面音乐可视化工具，可播放用户本地音乐，也可通过用户本机开启的 LX Music 开放 API 读取播放状态、歌单信息和歌词信息。
 
@@ -228,7 +228,7 @@ npm run dist
 
 ## 发布仓库
 
-默认发布仓库配置为 `ww/Mineradio`。如果你 fork 或迁移到其它仓库，请同步修改 `package.json` 里的 `homepage`、`repository.url`、`bugs.url` 和 `mineradio.update` 配置。
+默认发布仓库配置为 `ww085213/Mineradio-LX-Music`。如果你 fork 或迁移到其它仓库，请同步修改 `package.json` 里的 `homepage`、`repository.url`、`bugs.url` 和 `mineradio.update` 配置。
 
 ## 开源说明
 

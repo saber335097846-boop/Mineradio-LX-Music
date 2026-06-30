@@ -6,13 +6,13 @@
   "author": "Mineradio contributors",
   "license": "MIT",
   "main": "desktop/main.js",
-  "homepage": "https://github.com/ww/Mineradio",
+  "homepage": "https://github.com/ww085213/Mineradio-LX-Music",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ww/Mineradio.git"
+    "url": "https://github.com/ww085213/Mineradio-LX-Music.git"
   },
   "bugs": {
-    "url": "https://github.com/ww/Mineradio/issues"
+    "url": "https://github.com/ww085213/Mineradio-LX-Music/issues"
   },
   "scripts": {
     "start": "electron .",
@@ -23,8 +23,8 @@
   "mineradio": {
     "update": {
       "provider": "github",
-      "owner": "ww",
-      "repo": "Mineradio",
+      "owner": "ww085213",
+      "repo": "Mineradio-LX-Music",
       "preview": true,
       "preferMirrors": true,
       "mirrors": [
