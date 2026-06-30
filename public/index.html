@@ -8377,7 +8377,7 @@ var CUSTOM_BG_DB_NAME = 'mineradio-custom-background-v1';
 var CUSTOM_BG_STORE = 'media';
 var customBgObjectUrl = '';
 var customBgApplyToken = 0;
-var wallpaperCoverExpanded = true;
+var wallpaperCoverExpanded = false;
 function currentCustomBackgroundMedia() {
   return normalizeCustomBackgroundMedia(fx && (fx.backgroundMedia || fx.backgroundImage));
 }
@@ -24305,11 +24305,11 @@ function applyWallpaperEngineItem(index) {
     wallpaper:true
   }, true);
   fx.backgroundOpacity = item.dynamic ? 0.68 : 0.62;
-  wallpaperCoverExpanded = true;
+  wallpaperCoverExpanded = false;
   updateCustomBackgroundControls();
   saveLyricLayout();
   closeWallpaperPicker();
-  showToast('Wallpaper 背景已应用 · 播放封面保持显示');
+  showToast('Wallpaper 背景已应用 · 已自动柔化');
 }
 function readBackgroundImageFile(file) {
   if (!file || !/^image\//i.test(file.type || '')) {
