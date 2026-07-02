@@ -9,36 +9,53 @@ function setFetchImplementation(fn) {
 }
 
 async function fetchJson(url, options = {}) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 18000);
-  try {
-    let response;
+  let lastError;
+  const maxAttempts = Math.max(1, Math.min(3, Number(options.retryAttempts) || 3));
+  const requestOptions = { ...options };
+  delete requestOptions.retryAttempts;
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 18000);
     try {
-      response = await networkFetch(url, {
-        ...options,
-        signal: controller.signal,
-        headers: {
-          'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          ...(options.headers || {}),
-        },
-      });
-    } catch (error) {
-      // Node/Electron fetch can fail differently on different Windows machines
-      // (AbortError, DNS, proxy, certificate, ERR_FAILED, blocked client, etc.).
-      // Always retry JSON API calls with the native http/https stack before
-      // giving up, instead of only handling a small set of error messages.
+      let response;
       try {
-        return await fetchJsonNative(url, options);
-      } catch (nativeError) {
-        nativeError.cause = nativeError.cause || error;
-        throw nativeError;
+        response = await networkFetch(url, {
+          ...requestOptions,
+          signal: controller.signal,
+          headers: {
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            ...(requestOptions.headers || {}),
+          },
+        });
+      } catch (error) {
+        try {
+          return await fetchJsonNative(url, requestOptions);
+        } catch (nativeError) {
+          nativeError.cause = nativeError.cause || error;
+          throw nativeError;
+        }
       }
+      if (!response.ok) {
+        const error = new Error(`HTTP_${response.status}`);
+        const retryAfter = response.headers && response.headers.get && response.headers.get('retry-after');
+        if (retryAfter) {
+          const seconds = Number(retryAfter);
+          error.retryAfterMs = Number.isFinite(seconds) ? seconds * 1000 : Math.max(0, Date.parse(retryAfter) - Date.now());
+        }
+        throw error;
+      }
+      return await response.json();
+    } catch (error) {
+      lastError = error;
+      const retryable = /HTTP_(?:429|5\d\d)|abort|timeout|fetch|network|socket|ECONN|ENOTFOUND/i.test(String(error && (error.message || error)));
+      if (!retryable || attempt >= maxAttempts - 1) throw error;
+      const delay = Math.max(350 * (2 ** attempt), Math.min(10000, Math.max(0, Number(error.retryAfterMs) || 0)));
+      await new Promise(resolve => setTimeout(resolve, delay));
+    } finally {
+      clearTimeout(timer);
     }
-    if (!response.ok) throw new Error(`HTTP_${response.status}`);
-    return await response.json();
-  } finally {
-    clearTimeout(timer);
   }
+  throw lastError || new Error('PLAYLIST_REQUEST_FAILED');
 }
 
 function fetchJsonNative(url, options = {}, redirects = 0) {
@@ -448,6 +465,31 @@ function detect(input, preferredSource) {
   throw new Error('无法识别链接；请选择平台并粘贴歌单分享链接，或直接输入数字歌单 ID');
 }
 
+function extractPlatformPlaylistId(source, value) {
+  const text = decodeHtmlEntities(String(value || ''));
+  const sourcePatterns = {
+    tx: [
+      /(?:disstid|playlistId|playlist_id|tid)["'\s:=/&?#-]+(\d{4,})/i,
+      /\/playlist\/(\d{4,})/i,
+      /\/playlist\.html[^"'<>]*[?&#](?:id|disstid)=(\d{4,})/i,
+    ],
+    wy: [
+      /(?:playlistId|playlist_id|resourceId)["'\s:=/&?#-]+(\d{4,})/i,
+      /\/playlist\/(\d{4,})/i,
+      /playlist[^"'<>]*[?&#]id=(\d{4,})/i,
+    ],
+    kw: [
+      /(?:playlistId|playlist_id|pid)["'\s:=/&?#-]+(\d{4,})/i,
+      /\/playlist(?:_detail)?\/(\d{4,})/i,
+    ],
+  };
+  for (const pattern of sourcePatterns[source] || []) {
+    const match = text.match(pattern);
+    if (match) return match[1];
+  }
+  return '';
+}
+
 function decodeHtmlEntities(text) {
   return String(text || '')
     .replace(/&amp;/gi, '&')
@@ -598,16 +640,77 @@ async function expandShareLink(input) {
 }
 
 async function importQQ(id) {
-  const url = `https://c.y.qq.com/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg?type=1&json=1&utf8=1&onlysong=0&new_format=1&disstid=${id}&loginUin=0&hostUin=0&format=json&platform=yqq.json&needNewCode=0`;
-  const data = await fetchJson(url, { headers:{ Origin:'https://y.qq.com', Referer:`https://y.qq.com/n/ryqq/playlist/${id}` } });
-  const list = data?.cdlist?.[0];
+  const headers = { Origin:'https://y.qq.com', Referer:`https://y.qq.com/n/ryqq/playlist/${id}` };
+  const oldQuery = `type=1&json=1&utf8=1&onlysong=0&new_format=1&disstid=${encodeURIComponent(id)}&loginUin=0&hostUin=0&format=json&platform=yqq.json&needNewCode=0`;
+  const legacyRequests = [
+    `https://c.y.qq.com/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg?${oldQuery}`,
+    `https://c6.y.qq.com/qzone/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg?${oldQuery}`,
+    `https://i.y.qq.com/qzone-music/fcg-bin/fcg_ucc_getcdinfo_byids_cp.fcg?${oldQuery}`,
+  ].map(url => fetchJson(url, { headers, retryAttempts:1 }).then(data => data?.cdlist?.[0]).catch(() => null));
+  const musicuPage = async (begin, count) => {
+    const body = {
+      comm:{ ct:24, cv:0 },
+      req_0:{
+        module:'music.srfDissInfo.aiDissInfo',
+        method:'uniform_get_Dissinfo',
+        param:{ disstid:Number(id), enc_host_uin:'', tag:1, userinfo:1, song_begin:begin, song_num:count },
+      },
+    };
+    const data = await fetchJson('https://u.y.qq.com/cgi-bin/musicu.fcg', {
+      method:'POST',
+      retryAttempts:1,
+      headers:{ ...headers, 'content-type':'application/json' },
+      body:JSON.stringify(body),
+    });
+    const payload = data?.req_0?.data || {};
+    const info = payload.dirinfo || payload.dissinfo || {};
+    const rows = (payload.songlist || payload.songList || []).map(item => item?.songInfo || item?.songinfo || item).filter(Boolean);
+    return { info, rows, total:Number(info.songnum || info.songNum || payload.total_song_num || payload.total || rows.length) };
+  };
+  const firstMusicu = musicuPage(0, 200).catch(() => null);
+  const candidates = await Promise.all([...legacyRequests, firstMusicu]);
+  const legacyList = candidates.slice(0, 3).find(Boolean);
+  const modern = candidates[3];
+  const list = legacyList || (modern ? {
+    dissname:modern.info.dissname || modern.info.title || modern.info.name,
+    logo:modern.info.logo || modern.info.picurl || modern.info.cover,
+    songlist:modern.rows,
+    songnum:modern.total,
+  } : null);
   if (!list) throw new Error('小秋歌单读取失败');
+  const rows = [...(list.songlist || [])];
+  if (legacyList && modern?.rows?.length) {
+    const existing = new Set(rows.map(item => String(item.mid || item.songmid || item.id || item.songid || '')).filter(Boolean));
+    for (const item of modern.rows) {
+      const key = String(item.mid || item.songmid || item.id || item.songid || '');
+      if (!key || existing.has(key)) continue;
+      existing.add(key);
+      rows.push(item);
+    }
+  }
+  const total = Number(list.songnum || list.songNum || modern?.total || rows.length);
+  if (modern && total > rows.length) {
+    const seen = new Set(rows.map(item => String(item.mid || item.songmid || item.id || item.songid || '')).filter(Boolean));
+    for (let begin = rows.length; begin < total && begin < 20000; begin += 200) {
+      const page = await musicuPage(begin, Math.min(200, total - begin));
+      if (!page.rows.length) break;
+      let added = 0;
+      for (const item of page.rows) {
+        const key = String(item.mid || item.songmid || item.id || item.songid || '');
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        rows.push(item);
+        added += 1;
+      }
+      if (!added) break;
+    }
+  }
   return {
     name:list.dissname || `小秋歌单 ${id}`, cover:list.logo || '',
-    songs:(list.songlist || []).map(item => ({
-      id:item.id, songmid:item.mid, name:item.title || item.name || '', singer:singerText(item.singer),
-      albumName:item.album?.name || '', albumId:item.album?.mid || '', albumMid:item.album?.mid || '',
-      strMediaMid:item.file?.media_mid || item.mid || '', picUrl:item.album?.mid ? `https://y.gtimg.cn/music/photo_new/T002R500x500M000${item.album.mid}.jpg` : '',
+    songs:rows.map(item => ({
+      id:item.id || item.songid, songmid:item.mid || item.songmid, name:item.title || item.name || item.songname || '', singer:singerText(item.singer),
+      albumName:item.album?.name || item.albumname || '', albumId:item.album?.mid || item.albummid || '', albumMid:item.album?.mid || item.albummid || '',
+      strMediaMid:item.file?.media_mid || item.strMediaMid || item.mid || item.songmid || '', picUrl:(item.album?.mid || item.albummid) ? `https://y.gtimg.cn/music/photo_new/T002R500x500M000${item.album?.mid || item.albummid}.jpg` : '',
       interval:durationText(item.interval), source:'tx', types:['flac','320k','128k'],
     })),
   };
@@ -652,12 +755,22 @@ async function importKW(id) {
   if (data?.result !== 'ok') throw new Error(`酷我歌单读取失败${data?.reason ? `：${data.reason}` : ''}`);
   const rows = [...(data.musiclist || [])];
   const total = Number(data.total || data.validtotal || rows.length);
-  for (let page = 1; rows.length < total && page < 100; page += 1) {
+  const seen = new Set(rows.map(item => String(item.musicrid || item.id || '').replace('MUSIC_', '')).filter(Boolean));
+  let stagnantPages = 0;
+  for (let page = 1; page < 300 && (!total || seen.size < total); page += 1) {
     const pageData = await fetchJson(makeUrl(page));
     const pageRows = pageData?.musiclist || [];
     if (!pageRows.length) break;
-    rows.push(...pageRows);
-    if (pageRows.length < pageSize) break;
+    let added = 0;
+    for (const item of pageRows) {
+      const key = String(item.musicrid || item.id || '').replace('MUSIC_', '');
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      rows.push(item);
+      added += 1;
+    }
+    stagnantPages = added ? 0 : stagnantPages + 1;
+    if (stagnantPages >= 2) break;
   }
   const musiclist = uniqueBy(rows, item => String(item.musicrid || item.id || '').replace('MUSIC_', ''));
   return {
@@ -1190,7 +1303,10 @@ async function importKugouGlobalCollection(globalId, options = {}) {
   const noFilterComplete = noFilterRows.length > 0 && (!noFilter.total || noFilterRows.length >= noFilter.total);
   const paged = noFilterComplete ? { rows:[], total:0 } : await fetchKugouGlobalRows(globalId);
   let legacyRows = [];
-  if (!noFilterRows.length && !(paged.rows || []).length) {
+  const knownTotal = Math.max(Number(noFilter.total || 0), Number(paged.total || 0), Number(info.count || info.total || info.song_count || 0));
+  const combinedBeforeLegacy = uniqueBy([...(noFilter.rows || []), ...(paged.rows || [])],
+    item => item.audio_id || item.album_audio_id || item.id || item.hash || item.HASH || item.FileHash);
+  if (!combinedBeforeLegacy.length || (knownTotal && combinedBeforeLegacy.length < knownTotal)) {
     legacyRows = await fetchKugouGlobalLegacyRows(globalId);
   }
   const rows = uniqueBy([
@@ -1254,15 +1370,6 @@ async function importKG(id, originalInput, context = {}) {
     embeddedRows = Array.isArray(previewRows) ? previewRows : [];
   }
   if (!/^\d+$/.test(identity)) {
-    if (embeddedRows.length > 10) {
-      const listInfo = sharedInfo?.listinfo || sharedInfo?.special_info || sharedInfo?.playlist || {};
-      return {
-        name:listInfo.name || listInfo.specialname || sharedInfo?.name || sharedInfo?.specialname || `小枸歌单 ${identity || ''}`.trim(),
-        cover:String(listInfo.pic || listInfo.imgurl || listInfo.img || sharedInfo?.pic || sharedInfo?.imgurl || '').replace('{size}', '400'),
-        songs:mapKugouSongs(embeddedRows),
-      };
-    }
-
     // New ordinary Xiaogou shares use songlist/gcid_* and often expose only
     // ten preview rows. Reuse the global collection resolver and Lite API
     // before reporting failure instead of requiring a legacy numeric ID.
@@ -1330,7 +1437,7 @@ async function importKG(id, originalInput, context = {}) {
 
         try {
           const shared = await fetchKugouChainShare(chain);
-          if (shared.rows.length > 10) {
+          if (shared.rows.length > 10 && (!shared.total || shared.rows.length >= shared.total)) {
             const songs = mapKugouSongs(shared.rows);
             if (songs.length) return {
               name:shared.name || `小枸歌单 ${chain}`,
@@ -1362,7 +1469,18 @@ async function importKG(id, originalInput, context = {}) {
         } catch (_fallbackError) {}
       }
 
-      throw new Error('小枸歌单已识别，但服务器未返回完整歌曲列表；已尝试新版 GCID 解码（id_type 1/2）、无过滤全量接口、分享链转换及旧分页接口');
+      if (embeddedRows.length) {
+        const listInfo = sharedInfo?.listinfo || sharedInfo?.special_info || sharedInfo?.playlist || {};
+        const embeddedTotal = Number(listInfo.count || listInfo.total || sharedInfo?.count || sharedInfo?.total || 0);
+        if (!embeddedTotal || embeddedRows.length >= embeddedTotal) {
+          return {
+            name:listInfo.name || listInfo.specialname || sharedInfo?.name || sharedInfo?.specialname || `小枸歌单 ${identity || ''}`.trim(),
+            cover:String(listInfo.pic || listInfo.imgurl || listInfo.img || sharedInfo?.pic || sharedInfo?.imgurl || '').replace('{size}', '400'),
+            songs:mapKugouSongs(embeddedRows),
+          };
+        }
+      }
+      throw new Error('小枸歌单已识别，但服务器未返回完整歌曲列表；为避免只导入预览歌曲，本次没有保存不完整结果');
     }
     throw new Error('该链接不是可读取的普通小枸歌单；概念版歌单请切换到“小枸概念版”入口');
   }
@@ -1431,14 +1549,17 @@ async function importMG(id, originalInput, context = {}) {
   }
   const rows = [...miguRows(songsData)];
   const total = Number(songsData?.data?.totalCount || songsData?.data?.total || songsData?.totalCount || infoData?.data?.musicNum || infoData?.data?.songCount || rows.length);
-  for (let page = 2; page <= 200 && (!total || rows.length < total); page += 1) {
+  let uniqueCount = uniqueBy(rows, item => item.contentId || item.songId || item.id || item.copyrightId).length;
+  let stagnantPages = 0;
+  for (let page = 2; page <= 500 && (!total || uniqueCount < total); page += 1) {
     const pageData = await fetchJson(songUrl(page), { headers });
     const pageRows = miguRows(pageData);
     if (!pageRows.length) break;
-    const before = uniqueBy(rows, item => item.contentId || item.songId || item.id || item.copyrightId).length;
+    const before = uniqueCount;
     rows.push(...pageRows);
-    const after = uniqueBy(rows, item => item.contentId || item.songId || item.id || item.copyrightId).length;
-    if (after === before || pageRows.length < pageSize) break;
+    uniqueCount = uniqueBy(rows, item => item.contentId || item.songId || item.id || item.copyrightId).length;
+    stagnantPages = uniqueCount > before ? 0 : stagnantPages + 1;
+    if (stagnantPages >= 2) break;
   }
   const songs = uniqueBy(rows, item => item.contentId || item.songId || item.id || item.copyrightId);
   if (!songs.length) throw new Error('小菇歌单读取失败；请确认歌单已公开并在中国大陆网络环境下重试');
@@ -1492,6 +1613,16 @@ async function importPlaylist(input, preferredSource) {
     } else if (source === 'kgc') {
       const id = extractKugouConceptIdentity(`${resolution.url}\n${resolution.html}`);
       if (id) parsed = { source:'kgc', id, input:resolution.url };
+    } else if (['tx', 'wy', 'kw'].includes(source)) {
+      const id = extractPlatformPlaylistId(source, `${resolution.url}\n${resolution.html}\n${originalInput}`);
+      if (id) parsed = { source, id, input:resolution.url };
+    }
+  }
+  if (!parsed) {
+    const source = normalizeSource(preferredSource);
+    if (['tx', 'wy', 'kw'].includes(source)) {
+      const id = extractPlatformPlaylistId(source, `${resolution.url}\n${resolution.html}\n${originalInput}`);
+      if (id) parsed = { source, id, input:resolution.url || originalInput };
     }
   }
   if (!parsed) throw lastDetectError || new Error('无法识别链接；请选择平台并粘贴歌单分享链接，或直接输入数字歌单 ID');
