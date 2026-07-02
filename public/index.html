@@ -96,8 +96,8 @@ body.desktop-shell.desktop-fullscreen #top-right{top:24px}
 
 /* ---------- 背景 ---------- */
 #custom-bg{position:fixed;inset:0;z-index:0;background:var(--custom-bg-color,#000);overflow:hidden;transition:background .35s ease}
-#custom-bg-video{position:absolute;inset:-1px;width:calc(100% + 2px);height:calc(100% + 2px);object-fit:cover;opacity:var(--custom-bg-video-opacity,0);filter:none;transform:scale(1.002);transition:opacity .35s ease;pointer-events:none;background:#000}
-#custom-bg::before{content:'';position:absolute;inset:-1px;background-image:var(--custom-bg-image,none);background-size:cover;background-position:center;opacity:var(--custom-bg-image-opacity,0);filter:none;transform:scale(1.002);transition:opacity .35s ease,background-image .35s ease;pointer-events:none}
+#custom-bg-video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;opacity:var(--custom-bg-video-opacity,0);filter:none;transition:opacity .35s ease;pointer-events:none;background:#000}
+#custom-bg::before{content:'';position:absolute;inset:0;background-image:var(--custom-bg-image,none);background-size:contain;background-repeat:no-repeat;background-position:center;opacity:var(--custom-bg-image-opacity,0);filter:none;transition:opacity .35s ease,background-image .35s ease;pointer-events:none}
 #custom-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.06),rgba(0,0,0,.16));opacity:var(--custom-bg-overlay-opacity,0);pointer-events:none}
 .wallpaper-picker{display:none;position:fixed;inset:0;z-index:1900;align-items:center;justify-content:center;padding:34px;background:rgba(0,0,0,.66);backdrop-filter:blur(16px)}
 .wallpaper-picker.show{display:flex}
@@ -106,7 +106,7 @@ body.desktop-shell.desktop-fullscreen #top-right{top:24px}
 .wallpaper-picker-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
 .wallpaper-card{position:relative;min-height:132px;border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,.10);background:#111;cursor:pointer}
 .wallpaper-card{content-visibility:auto;contain-intrinsic-size:0 132px}
-.wallpaper-card img{width:100%;height:132px;display:block;object-fit:cover;filter:brightness(.72) saturate(.82);transition:transform .25s,filter .25s}
+.wallpaper-card img{width:100%;height:132px;display:block;object-fit:contain;background:#050608;filter:brightness(.82) saturate(.88);transition:transform .25s,filter .25s}
 .wallpaper-card:hover img{transform:scale(1.035);filter:brightness(.88) saturate(.92)}
 .wallpaper-card-meta{position:absolute;inset:auto 0 0;padding:26px 11px 10px;background:linear-gradient(transparent,rgba(0,0,0,.88));font-size:11px;color:#fff}
 .wallpaper-card-meta small{display:block;margin-top:3px;color:rgba(255,255,255,.58)}
@@ -26396,6 +26396,11 @@ async function loadWallpaperEngineLibrary(showNotice) {
   try {
     var result = await apiJson('/api/wallpaper/list?t=' + Date.now());
     wallpaperEngineLibrary = result && Array.isArray(result.wallpapers) ? result.wallpapers : [];
+    var currentWallpaperMedia = fx && fx.backgroundMedia;
+    if (currentWallpaperMedia && currentWallpaperMedia.wallpaper && /[?&]kind=preview(?:&|$)/i.test(String(currentWallpaperMedia.src || ''))) {
+      setCustomBackgroundMedia(null, true);
+      showToast('已移除低清 Scene 预览背景，请重新选择高清壁纸');
+    }
     renderWallpaperPicker();
     if (showNotice) showToast(wallpaperEngineLibrary.length ? ('已找到 ' + wallpaperEngineLibrary.length + ' 个 Wallpaper 壁纸') : '没有找到可用的 Wallpaper 壁纸');
     return wallpaperEngineLibrary;
@@ -26413,7 +26418,7 @@ function renderWallpaperPicker() {
   var grid = document.getElementById('wallpaper-picker-grid');
   if (!grid) return;
   var visibleItems = wallpaperEngineLibrary.map(function(item, index){ return { item:item, index:index }; })
-    .filter(function(entry){ return !hiddenWallpaperIds.has(String(entry.item.id)); });
+    .filter(function(entry){ return entry.item.playable && !hiddenWallpaperIds.has(String(entry.item.id)); });
   if (!visibleItems.length) {
     grid.innerHTML = '<div style="grid-column:1/-1;padding:36px;text-align:center;color:rgba(255,255,255,.42)">没有找到可用壁纸</div>';
     return;
@@ -26425,9 +26430,7 @@ function renderWallpaperPicker() {
       '<button class="wallpaper-card-hide" type="button" title="从 MR 隐藏" onclick="event.stopPropagation();hideWallpaperEngineItem(' + index + ')">×</button>' +
       (preview ? '<img src="' + preview + '" alt="" loading="lazy">' : '<div style="height:132px;background:linear-gradient(135deg,#1d2330,#07080b)"></div>') +
       '<span class="wallpaper-card-meta">' + escHtml(item.title || 'Wallpaper') + '<small>' +
-        (item.playable
-          ? (item.mediaType === 'video' ? '动态媒体 · 原始清晰度' : '图片壁纸 · 原始清晰度')
-          : '原生 Scene · 点击使用预览图') +
+        (item.mediaType === 'video' ? '动态媒体 · 原始清晰度' : '图片壁纸 · 原始清晰度') +
       '</small></span>' +
     '</div>';
   }).join('');
@@ -26462,13 +26465,13 @@ function closeWallpaperPicker() {
 function applyWallpaperEngineItem(index) {
   var item = wallpaperEngineLibrary[Number(index)];
   if (!item) return;
-  var playable = item.playable !== false && (item.mediaType || item.dynamic);
-  if (!playable && !item.hasPreview) {
-    showToast('该原生 Scene 没有可读取的媒体或预览图');
+  var playable = item.playable && (item.mediaType || item.dynamic);
+  if (!playable) {
+    showToast('该壁纸没有可读取的高清原始媒体');
     return;
   }
-  var kind = playable ? 'media' : 'preview';
-  var mediaType = playable ? (item.mediaType || (item.dynamic ? 'video' : 'image')) : 'image';
+  var kind = 'media';
+  var mediaType = item.mediaType || (item.dynamic ? 'video' : 'image');
   setCustomBackgroundMedia({
     type:mediaType,
     src:wallpaperMediaUrl(item, kind),
@@ -26482,7 +26485,7 @@ function applyWallpaperEngineItem(index) {
   updateCustomBackgroundControls();
   saveLyricLayout();
   closeWallpaperPicker();
-  showToast(playable ? 'Wallpaper 背景已应用 · 原始清晰度' : '原生 Scene 无法直接渲染，已使用预览图背景');
+  showToast('Wallpaper 背景已应用 · 完整画面 · 原始清晰度');
 }
 function readBackgroundImageFile(file) {
   if (!file || !/^image\//i.test(file.type || '')) {
