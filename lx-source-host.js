@@ -27,6 +27,7 @@ const LX_DATA_DIRS = [
 ].filter(Boolean);
 const MR_SOURCE_DIR = path.join(APPDATA_DIR || LOCALAPPDATA_DIR || process.cwd(), 'Mineradio', 'sources');
 const MR_SOURCE_FILE = path.join(MR_SOURCE_DIR, 'active-source.json');
+const MR_SOURCES_FILE = path.join(MR_SOURCE_DIR, 'sources.json');
 const ALLOWED_SOURCES = new Set(['kw', 'kg', 'tx', 'wy', 'mg', 'xm', 'local']);
 const ALLOWED_ACTIONS = new Set(['musicUrl', 'lyric', 'pic']);
 const LX_HTTP_TIMEOUT_MS = 12000;
@@ -74,11 +75,39 @@ function saveMigratedSource(record) {
   try {
     fs.mkdirSync(MR_SOURCE_DIR, { recursive: true });
     fs.writeFileSync(MR_SOURCE_FILE, JSON.stringify(record), 'utf8');
+    const store = readSourceStore();
+    if (!store.records.some(item => item.id === record.id || item.script === record.script)) {
+      store.records.push(record);
+    }
+    store.activeId = record.id;
+    writeSourceStore(store);
   } catch (_err) {}
 }
 
+function readSourceStore() {
+  const saved = readJsonIfExists(MR_SOURCES_FILE);
+  const records = Array.isArray(saved?.records)
+    ? saved.records.filter(item => item && typeof item.script === 'string' && item.script.trim())
+    : [];
+  const legacy = readJsonIfExists(MR_SOURCE_FILE);
+  if (legacy && typeof legacy.script === 'string' && legacy.script.trim() &&
+      !records.some(item => item.id === legacy.id || item.script === legacy.script)) {
+    records.push(legacy);
+  }
+  return { activeId: String(saved?.activeId || legacy?.id || ''), records };
+}
+
+function writeSourceStore(store) {
+  fs.mkdirSync(MR_SOURCE_DIR, { recursive: true });
+  fs.writeFileSync(MR_SOURCES_FILE, JSON.stringify({
+    activeId: String(store?.activeId || ''),
+    records: Array.isArray(store?.records) ? store.records : [],
+  }), 'utf8');
+}
+
 function activeScriptRecord() {
-  const imported = readJsonIfExists(MR_SOURCE_FILE);
+  const store = readSourceStore();
+  const imported = store.records.find(item => item.id === store.activeId) || store.records[0];
   if (imported && typeof imported.script === 'string' && imported.script.trim()) return imported;
 
   const saved = readFirstLxJson('user_api.json');
@@ -96,9 +125,8 @@ function activeScriptRecord() {
 }
 
 function allScriptRecords() {
-  const records = [];
-  const imported = readJsonIfExists(MR_SOURCE_FILE);
-  if (imported && typeof imported.script === 'string') records.push(imported);
+  const store = readSourceStore();
+  const records = store.records.slice();
   const saved = readFirstLxJson('user_api.json');
   const userApis = saved && (Array.isArray(saved) ? saved : saved.userApis);
   if (Array.isArray(userApis)) records.push(...userApis.filter(item => item && typeof item.script === 'string'));
@@ -390,12 +418,58 @@ async function importSource(script, fileName) {
   if (!/(?:globalThis|global|this)\s*(?:\.\s*lx|\[\s*['\"]lx['\"]\s*\])|(?:^|[^\w])lx\s*[.;]/.test(script)) throw new Error('LX_SOURCE_API_NOT_FOUND');
   const record = metadataFromScript(script, fileName);
   fs.mkdirSync(MR_SOURCE_DIR, { recursive: true });
+  const previousStore = readSourceStore();
+  const store = { activeId: record.id, records: previousStore.records.slice() };
+  const duplicateIndex = store.records.findIndex(item => item.script === record.script);
+  if (duplicateIndex >= 0) {
+    record.id = store.records[duplicateIndex].id;
+    store.records[duplicateIndex] = record;
+  } else {
+    store.records.push(record);
+  }
+  store.activeId = record.id;
+  writeSourceStore(store);
   fs.writeFileSync(MR_SOURCE_FILE, JSON.stringify(record), 'utf8');
   try {
     const host = await getRuntime(true);
-    return { ok: true, name: host.name, version: host.version, sources: host.sources };
+    return { ok: true, name: host.name, version: host.version, sources: host.sources, installed: listSources() };
   } catch (err) {
-    try { fs.unlinkSync(MR_SOURCE_FILE); } catch (_err) {}
+    writeSourceStore(previousStore);
+    const previous = previousStore.records.find(item => item.id === previousStore.activeId);
+    try {
+      if (previous) fs.writeFileSync(MR_SOURCE_FILE, JSON.stringify(previous), 'utf8');
+      else fs.unlinkSync(MR_SOURCE_FILE);
+    } catch (_err) {}
+    runtime = null;
+    throw err;
+  }
+}
+
+function listSources() {
+  const store = readSourceStore();
+  return store.records.map(item => ({
+    id: item.id,
+    name: item.name || '未命名音源',
+    version: item.version || '',
+    author: item.author || '',
+    active: item.id === store.activeId,
+  }));
+}
+
+async function selectSource(id) {
+  const store = readSourceStore();
+  const record = store.records.find(item => item.id === String(id || ''));
+  if (!record) throw new Error('LX_SOURCE_NOT_FOUND');
+  const previousId = store.activeId;
+  store.activeId = record.id;
+  writeSourceStore(store);
+  fs.writeFileSync(MR_SOURCE_FILE, JSON.stringify(record), 'utf8');
+  try {
+    const host = await getRuntime(true);
+    return { ok: true, name: host.name, version: host.version, sources: host.sources, installed: listSources() };
+  } catch (err) {
+    store.activeId = previousId;
+    writeSourceStore(store);
     runtime = null;
     throw err;
   }
@@ -437,6 +511,7 @@ async function status() {
     name: host.name,
     version: host.version,
     sources: host.sources,
+    installed: listSources(),
   };
 }
 
@@ -596,6 +671,8 @@ module.exports = {
   getRuntime,
   importSource,
   importSourceUrl,
+  listSources,
+  selectSource,
   resolveMusicUrl,
   resolveLyrics,
   status,

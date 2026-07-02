@@ -18903,10 +18903,59 @@ async function showCurrentLxSource() {
     showToast('尚未配置播放音源，请点击顶部“导入”选择音源文件');
     return;
   }
-  var platforms = Object.keys(info.sources || {}).map(function(key){
-    return info.sources[key] && info.sources[key].name || key;
+  var installed = Array.isArray(info.installed) ? info.installed : [];
+  if (installed.length < 2) {
+    var platforms = Object.keys(info.sources || {}).map(function(key){
+      return info.sources[key] && info.sources[key].name || key;
+    });
+    showToast('当前音源：' + info.name + ' ' + (info.version || '') + (platforms.length ? ' · ' + platforms.join(' / ') : ''));
+    return;
+  }
+  var old = document.getElementById('lx-source-manager-mask');
+  if (old) old.remove();
+  var mask = document.createElement('div');
+  mask.id = 'lx-source-manager-mask';
+  mask.className = 'playlist-select-mask';
+  mask.innerHTML =
+    '<div class="playlist-select-dialog" role="dialog" aria-modal="true">' +
+      '<div class="playlist-select-head"><div><strong>选择播放音源</strong><br><small>已导入 ' + installed.length + ' 个音源，点击即可切换</small></div><button class="fx-mini-btn ghost" data-source-close>关闭</button></div>' +
+      '<div style="display:grid;gap:9px;margin-top:14px">' +
+        installed.map(function(item){
+          return '<button type="button" class="playlist-import-platform' + (item.active ? ' active' : '') + '" data-source-id="' +
+            escapeHtml(String(item.id || '')) + '" style="width:100%;text-align:left;padding:12px 14px">' +
+            escapeHtml(String(item.name || '未命名音源')) +
+            (item.version ? ' <small style="opacity:.55">v' + escapeHtml(String(item.version)) + '</small>' : '') +
+            (item.active ? ' <small style="float:right">当前</small>' : '') +
+          '</button>';
+        }).join('') +
+      '</div>' +
+    '</div>';
+  mask.addEventListener('click', async function(event){
+    if (event.target === mask || event.target.closest('[data-source-close]')) {
+      mask.remove();
+      return;
+    }
+    var button = event.target.closest('[data-source-id]');
+    if (!button) return;
+    try {
+      button.disabled = true;
+      var result = await apiJson('/api/lx-source/select', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ id:button.getAttribute('data-source-id') }),
+        timeoutMs:20000
+      });
+      if (!result || !result.ok) throw new Error(result && result.error || 'SOURCE_SELECT_FAILED');
+      currentLxSourceInfo = result;
+      await refreshLxSourceBadge();
+      mask.remove();
+      showToast('已切换音源：' + result.name);
+    } catch (e) {
+      button.disabled = false;
+      showToast('音源切换失败：' + (e && e.message || '未知错误'));
+    }
   });
-  showToast('当前音源：' + info.name + ' ' + (info.version || '') + (platforms.length ? ' · ' + platforms.join(' / ') : ''));
+  document.body.appendChild(mask);
 }
 function setSearchMode(mode) {
   if (mode === 'song') mode = 'local';
