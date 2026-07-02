@@ -153,21 +153,41 @@ function steamLibraryRoots() {
     'E:\\SteamLibrary',
     'F:\\SteamLibrary',
   ]);
+  [process.env.ProgramFiles, process.env['ProgramFiles(x86)'], process.env['ProgramW6432']]
+    .filter(Boolean)
+    .forEach(base => roots.add(path.join(base, 'Steam')));
   steamRegistryRoots().forEach(root => roots.add(root));
   // 兼容 Steam 或 Wallpaper Engine 安装在任意盘符的常见自定义目录。
   for (let code = 67; code <= 90; code++) {
     const drive = String.fromCharCode(code) + ':\\';
     roots.add(path.join(drive, 'Steam'));
     roots.add(path.join(drive, 'SteamLibrary'));
+    roots.add(path.join(drive, 'Program Files', 'Steam'));
+    roots.add(path.join(drive, 'Program Files (x86)', 'Steam'));
     roots.add(path.join(drive, 'Games', 'Steam'));
     roots.add(path.join(drive, 'Games', 'SteamLibrary'));
   }
   for (const root of [...roots]) {
-    const vdf = path.join(root, 'steamapps', 'libraryfolders.vdf');
-    try {
-      const text = fs.readFileSync(vdf, 'utf8');
-      for (const match of text.matchAll(/"path"\s+"([^"]+)"/g)) roots.add(match[1].replace(/\\\\/g, '\\'));
-    } catch (_err) {}
+    [
+      path.join(root, 'steamapps', 'libraryfolders.vdf'),
+      path.join(root, 'config', 'libraryfolders.vdf'),
+    ].forEach(vdf => {
+      try {
+        const text = fs.readFileSync(vdf, 'utf8').replace(/^\uFEFF/, '');
+        // Steam 新版格式：
+        // "1" { "path" "D:\\SteamLibrary" }
+        for (const match of text.matchAll(/"path"\s+"([^"]+)"/gi)) {
+          const found = match[1].replace(/\\\\/g, '\\').trim();
+          if (/^[a-z]:\\/i.test(found)) roots.add(found);
+        }
+        // Steam 旧版格式：
+        // "1" "D:\\SteamLibrary"
+        for (const match of text.matchAll(/"\d+"\s+"([a-z]:\\{1,2}[^"]+)"/gi)) {
+          const found = match[1].replace(/\\\\/g, '\\').trim();
+          if (/^[a-z]:\\/i.test(found)) roots.add(found);
+        }
+      } catch (_err) {}
+    });
   }
   return [...roots].filter(root => fs.existsSync(root));
 }
