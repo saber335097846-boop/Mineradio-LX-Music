@@ -1572,7 +1572,9 @@ const server = http.createServer(async (req, res) => {
       const body = await readRequestBody(req);
       const source = String(body.source || '').toLowerCase();
       const musicInfo = body.musicInfo && typeof body.musicInfo === 'object' ? body.musicInfo : {};
-      const result = await lxSourceHost.resolveMusicUrl(source, musicInfo, String(body.quality || ''));
+      const result = await lxSourceHost.resolveMusicUrl(source, musicInfo, String(body.quality || ''), {
+        excludeResolvers: Array.isArray(body.excludeResolvers) ? body.excludeResolvers : [],
+      });
       sendJSON(res, { ok: true, source, ...result });
     } catch (err) {
       console.warn('[LXSourceResolve]', err.message);

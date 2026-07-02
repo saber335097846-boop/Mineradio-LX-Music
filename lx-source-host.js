@@ -579,7 +579,10 @@ function extractHttpUrl(value, depth = 0) {
   return '';
 }
 
-async function resolveMusicUrl(source, musicInfo, quality) {
+async function resolveMusicUrl(source, musicInfo, quality, options) {
+  options = options || {};
+  const excludedResolvers = new Set((Array.isArray(options.excludeResolvers) ? options.excludeResolvers : [])
+    .map(item => String(item || '').trim().toLowerCase()).filter(Boolean));
   const requested = String(quality || '').trim();
   const fallbackMap = {
     master: ['master', 'flac24bit', 'hires', 'flac', '320k', '128k'],
@@ -605,6 +608,10 @@ async function resolveMusicUrl(source, musicInfo, quality) {
   }
   const attempts = hostPromises.map(async hostPromise => {
     const host = await hostPromise;
+    if (excludedResolvers.has(String(host.name || '').trim().toLowerCase()) ||
+        excludedResolvers.has(String(host.id || '').trim().toLowerCase())) {
+      throw new Error('LX_SOURCE_EXCLUDED');
+    }
     const supported = Array.isArray(host.sources[source]?.qualitys) ? host.sources[source].qualitys : [];
     const rawCandidates = /^念心音源/i.test(host.name)
       ? ['320k', '128k', requested, 'flac']
