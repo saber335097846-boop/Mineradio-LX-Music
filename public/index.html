@@ -17018,6 +17018,8 @@ function renderHomeFolderPlaylists() {
   var cards = [];
   if (allSongs.length) {
     cards.push({
+      kind: 'all',
+      index: -1,
       label: 'ALL MUSIC',
       title: '全部本地音乐',
       sub: allSongs.length + ' 首 · 所有已导入文件夹',
@@ -17083,7 +17085,26 @@ function closePlaylistContextMenu() {
 }
 function deleteHomePlaylist(kind, index) {
   index = Number(index);
-  if (kind === 'lx') {
+  if (kind === 'all') {
+    if (!window.confirm('确定从 Mineradio 移除全部本地音乐吗？\n不会删除硬盘中的音乐文件。')) return;
+    if (audio) {
+      try { audio.pause(); } catch (_error) {}
+      try { audio.removeAttribute('src'); audio.load(); } catch (_error) {}
+    }
+    playing = false;
+    setPlayIcon(false);
+    clearSavedLocalLibraryFolderPath();
+    clearPlaybackSession();
+    localFolderPlaylists = [];
+    localLibrarySongs = [];
+    playQueue = (playQueue || []).filter(function(song){ return !song || song.type !== 'local'; });
+    playlist = (playlist || []).filter(function(song){ return !song || song.type !== 'local'; });
+    currentIdx = playQueue.length ? 0 : -1;
+    currentLocalSong = null;
+    localLibraryPassiveQueue = false;
+    clearSearchResults();
+    showToast('已移除全部本地音乐，硬盘文件未删除');
+  } else if (kind === 'lx') {
     var list = lxMirrorPlaylists[index];
     if (!list) return;
     if (!window.confirm('确定从 Mineradio 删除歌单“' + (list.name || '未命名歌单') + '”吗？')) return;
@@ -17125,7 +17146,7 @@ function openPlaylistContextMenu(event, kind, index) {
   var menu = document.createElement('div');
   menu.id = 'playlist-context-menu';
   menu.className = 'playlist-context-menu';
-  menu.innerHTML = '<button type="button">删除歌单</button>';
+  menu.innerHTML = '<button type="button">' + (kind === 'all' ? '移除全部本地音乐' : '删除歌单') + '</button>';
   document.body.appendChild(menu);
   var width = 168, height = 50;
   menu.style.left = Math.max(8, Math.min(innerWidth - width - 8, event.clientX)) + 'px';
@@ -25127,7 +25148,7 @@ async function handleLocalFolderFiles(files, opts) {
   safeSwitchPlaylistTab('playlists', renderReason);
   safeShelfRebuild(renderReason, true);
   renderHomeDiscover();
-  if ($input && !$input.value.trim()) renderLocalLibraryResults('');
+  if ($input && !$input.value.trim() && document.activeElement === $input) renderLocalLibraryResults('');
   if (!opts.restored) {
     var importedPlaylistPanel = document.getElementById('playlist-panel');
     if (importedPlaylistPanel && importedPlaylistPanel.dataset) importedPlaylistPanel.dataset.preserveTabOnOpen = '1';
@@ -25139,7 +25160,7 @@ async function handleLocalFolderFiles(files, opts) {
     if (!count) return;
     safeRenderQueuePanel('local-asset-cache-ready', { scrollCurrent: miniQueueOpen });
     renderHomeDiscover();
-    if ($input && !$input.value.trim()) renderLocalLibraryResults('');
+    if ($input && !$input.value.trim() && document.activeElement === $input) renderLocalLibraryResults('');
     scheduleShelfRebuild('local-asset-cache-ready', true);
     if (currentIdx >= 0 && playQueue[currentIdx]) updateControlTrackInfo(playQueue[currentIdx]);
     scheduleLocalLibraryIndexSave(opts.folderPath || libraryFolderPath, songs, 160);
@@ -25206,7 +25227,7 @@ async function handleFiles(files) {
     safeRenderQueuePanel('play-local-file');
     safeShelfRebuild('play-local-file', true);
     renderHomeDiscover();
-    if ($input && !$input.value.trim()) renderLocalLibraryResults('');
+    if ($input && !$input.value.trim() && document.activeElement === $input) renderLocalLibraryResults('');
     startLocalLibraryBackgroundProcessing([singleSong], { single:true });
     playQueueAt(0, { manual: true }).catch(function(e){ console.warn('[LocalFilePlay]', e); });
   }
