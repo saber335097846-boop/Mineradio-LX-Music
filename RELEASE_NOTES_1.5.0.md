@@ -12,7 +12,7 @@
 - 支持搜索当前歌单和跨全部歌单搜索，兼容中文输入法。
 - 本地歌曲缺少翻译时自动补查并合并翻译歌词。
 - 改进普通小枸、小枸概念版、咪咕及其他公开歌单导入。
-- Wallpaper Engine 支持多盘 Steam 库、重复项清理和高清媒体完整适配；原生 Scene 可交给 Wallpaper Engine 播放。
+- Wallpaper Engine 支持多盘 Steam 库、重复项清理，以及可读取图片和视频在 MR 窗口内的高清完整适配。
 - 第三方平台遇到 429、502、超时等临时错误时自动重试。
 - 导入本地音乐时自动识别并跳过明显损坏、加密或扩展名伪装的音频。
 - 修复桌面端点击歌单内容后面板意外收回。
@@ -29,5 +29,5 @@
 
 - 在线播放需要用户自行配置合法可用的 LX 兼容音源。
 - 第三方平台接口、访问限制或分享链接变化可能导致搜索或导入暂时失败。
-- Wallpaper Engine 原生 Scene `.pkg` 无法脱离 Wallpaper Engine 在 MR 内还原；MR 会调用用户已安装的 Wallpaper Engine 原生播放。
+- Wallpaper Engine 原生 Scene `.pkg` 无法脱离 Wallpaper Engine 在 MR 内还原；MR 不会调用它修改 Windows 桌面壁纸。
 - 损坏或加密的本地音频无法修复，MR 会跳过并提示。
