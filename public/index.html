@@ -17025,7 +17025,9 @@ function renderHomeTiles() {
 function renderHomeFolderPlaylists() {
   var grid = document.querySelector('#empty-home .home-grid');
   if (!grid) return;
+  ensureLocalUserPlaylistsLoaded();
   var folders = localFolderPlaylists || [];
+  var customLists = (userPlaylists || []).filter(function(pl){ return pl && pl.localUserPlaylist; });
   var allSongs = localSearchPool();
   var cards = [];
   if (allSongs.length) {
@@ -17040,6 +17042,19 @@ function renderHomeFolderPlaylists() {
       tone: 'library'
     });
   }
+  customLists.forEach(function(list, listIndex){
+    var songs = list && Array.isArray(list.songs) ? list.songs : [];
+    cards.push({
+      kind: 'custom',
+      index: listIndex,
+      label: 'MY PLAYLIST',
+      title: list.name || '我的歌单',
+      sub: songs.length + ' 首 · 本地保存',
+      cover: list.cover || (songs[0] ? songCoverSrc(songs[0], 320) : ''),
+      action: 'openLocalUserPlaylistInPanel(' + listIndex + ')',
+      tone: listIndex % 2 ? 'search' : 'playlist'
+    });
+  });
   folders.forEach(function(folder, folderIndex){
     var songs = folder && Array.isArray(folder.songs) ? folder.songs : [];
     cards.push({
@@ -17147,6 +17162,16 @@ function deleteHomePlaylist(kind, index) {
     });
     saveLocalLibraryFolderPaths(savedLocalLibraryFolderPaths().filter(function(path){ return String(path) !== folderPath; }));
     showToast('已移除歌单，硬盘文件未删除');
+  } else if (kind === 'custom') {
+    ensureLocalUserPlaylistsLoaded();
+    var customLists = (userPlaylists || []).filter(function(pl){ return pl && pl.localUserPlaylist; });
+    var custom = customLists[index];
+    if (!custom) return;
+    if (!window.confirm('确定删除自建歌单“' + (custom.name || '我的歌单') + '”吗？')) return;
+    userPlaylists = (userPlaylists || []).filter(function(pl){ return pl !== custom; });
+    userPlaylists._localLoaded = true;
+    saveLocalUserPlaylists();
+    showToast('已删除歌单：' + (custom.name || '我的歌单'));
   }
   renderHomeDiscover();
   renderLocalLibraryPlaylistPanel({ animate:false });
@@ -17757,6 +17782,15 @@ function openLocalFolderPlaylistInPanel(folderIndex) {
   openPlaylistPanelTab('playlists', true);
   renderLocalLibraryPlaylistPanel({ animate:true });
   scrollPlaylistPanelToSelector('[data-local-folder-index="' + folderIndex + '"]');
+}
+function openLocalUserPlaylistInPanel(listIndex) {
+  ensureLocalUserPlaylistsLoaded();
+  var lists = (userPlaylists || []).filter(function(pl){ return pl && pl.localUserPlaylist; });
+  var list = lists[Math.max(0, Number(listIndex) || 0)];
+  if (!list) return;
+  openPlaylistPanelTab('playlists', true);
+  renderLocalLibraryPlaylistPanel({ animate:true });
+  openPlaylistPanelDetail('local-user', list.id, list.name);
 }
 async function playHomeDaily() {
   homeForcedOpen = false;
@@ -18748,6 +18782,7 @@ async function createPlaylistFromCollect() {
   saveLocalUserPlaylists();
   renderCollectModal();
   renderLocalLibraryPlaylistPanel({ animate:true });
+  renderHomeDiscover();
   if (collectTargetSong) addCollectTargetToPlaylist(pl.id);
 }
 function collectResultMessage(r) {
@@ -18773,6 +18808,7 @@ async function addCollectTargetToPlaylist(pid) {
     pl.updatedAt = Date.now();
     saveLocalUserPlaylists();
     renderLocalLibraryPlaylistPanel({ animate:true });
+    renderHomeDiscover();
   }
   setCollectBusyPid(pid, false);
   renderCollectModal();
