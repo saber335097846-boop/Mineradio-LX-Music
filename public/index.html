@@ -1500,7 +1500,9 @@ body.desktop-shell.diy-mode #bottom-bar.stage-mode{left:50%;width:min(1080px,cal
 .pl-detail-title{font-size:13px;font-weight:780;color:rgba(255,255,255,.94);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pl-detail-sub{font-size:10.5px;color:rgba(255,255,255,.42);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pl-detail-actions{display:flex;align-items:center;gap:8px;margin:8px 0 10px}
-.pl-detail-search{display:flex;align-items:center;height:34px;margin:0 0 10px;padding:0 11px;border:1px solid rgba(255,255,255,.09);border-radius:11px;background:rgba(0,0,0,.18)}
+.pl-detail-search-label{margin:2px 2px 5px;color:rgba(255,255,255,.72);font-size:10.5px;font-weight:700;letter-spacing:.3px}
+.pl-detail-search{display:flex;align-items:center;height:38px;margin:0 0 10px;padding:0 12px;border:1px solid rgba(var(--fc-accent-rgb),.32);border-radius:11px;background:rgba(var(--fc-accent-rgb),.08);box-shadow:inset 0 1px rgba(255,255,255,.04)}
+.pl-detail-search::before{content:'⌕';margin-right:8px;color:rgba(var(--fc-accent-rgb),.9);font-size:18px;line-height:1}
 .pl-detail-search input{width:100%;border:0;outline:0;background:transparent;color:#fff;font:500 11.5px var(--font-sans)}
 .pl-detail-search input::placeholder{color:rgba(255,255,255,.32)}
 .pl-detail-play{height:30px;min-width:98px;padding:0 12px;border-radius:999px;border:1px solid rgba(var(--fc-accent-rgb),.32);background:rgba(var(--fc-accent-rgb),.10);color:#fff;font:700 11.5px var(--font-sans);display:inline-flex;align-items:center;justify-content:center;gap:7px;cursor:pointer}
@@ -19478,13 +19480,24 @@ function rememberExactSearchPlayedSong(song) {
   }
   if (!playedList.cover) playedList.cover = songCoverSrc(incoming, 500) || incoming.picUrl || incoming.cover || '';
   lxImportedPlaylists = lists;
+  var searchPlayedVisibilityKey = playlistVisibilityKey(playedList);
+  writeHiddenPlaylistKeys(readHiddenPlaylistKeys().filter(function(hiddenKey){
+    return hiddenKey !== searchPlayedVisibilityKey;
+  }));
   saveImportedLxPlaylists();
   lxMirrorPlaylists = (lxMirrorPlaylists || []).filter(function(list){
     return list && list.id !== SEARCH_PLAYED_PLAYLIST_ID && !(list.transient && /^mr_search_/.test(String(list.id || '')));
   });
   lxMirrorPlaylists = mergeLxPlaylistSources(lxMirrorPlaylists, lxImportedPlaylists);
   var playlistIndex = lxMirrorPlaylists.findIndex(function(list){ return list && list.id === SEARCH_PLAYED_PLAYLIST_ID; });
+  if (playlistIndex < 0) {
+    lxMirrorPlaylists.push(playedList);
+    playlistIndex = lxMirrorPlaylists.length - 1;
+  }
   playedList = lxMirrorPlaylists[playlistIndex];
+  if (!playedList || !Array.isArray(playedList.songs)) {
+    throw new Error('SEARCH_PLAYLIST_RESTORE_FAILED');
+  }
   playedList.songs = playedList.songs.map(function(item, index){
     return Object.assign({}, item, {
       lxPlaylistIndex:playlistIndex,
@@ -23502,7 +23515,7 @@ function playlistPanelDetailHtml(pl, provider) {
   return '<div class="pl-inline-detail" data-pl-detail="' + escHtml(key) + '">' +
     '<div class="pl-detail-sticky">' +
       '<div class="pl-detail-head">' + img + '<div style="flex:1;min-width:0"><div class="pl-detail-title">' + escHtml(pl.name || '歌单详情') + '</div><div class="pl-detail-sub">' + escHtml((pl.trackCount || tracks.length || 0) + ' 首 · ' + (pl.creator || '本地音乐库')) + '</div></div><div class="pl-detail-count">' + (loading ? '载入中' : (renderLimit + '/' + filteredEntries.length)) + '</div></div>' +
-      '<label class="pl-detail-search"><input type="search" data-pl-detail-search="1" value="' + escHtml(query) + '" placeholder="搜索当前歌单：歌名、歌手、专辑"></label>' +
+      '<div class="pl-detail-search-label">搜索当前歌单</div><label class="pl-detail-search"><input type="search" data-pl-detail-search="1" value="' + escHtml(query) + '" placeholder="输入歌名、歌手或专辑"></label>' +
       '<div class="pl-detail-actions"><button class="pl-detail-play" type="button" data-pl-detail-play="' + escHtml(key) + '"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>播放歌单</button><button class="fx-mini-btn ghost pl-detail-top-btn" type="button" data-pl-detail-top="1">回到顶部</button></div>' +
     '</div>' +
     '<div class="pl-detail-list">' + rows + '</div>' +
@@ -26317,7 +26330,11 @@ function renderWallpaperPicker() {
     return '<div class="wallpaper-card" role="button" tabindex="0" onclick="applyWallpaperEngineItem(' + index + ')">' +
       '<button class="wallpaper-card-hide" type="button" title="从 MR 隐藏" onclick="event.stopPropagation();hideWallpaperEngineItem(' + index + ')">×</button>' +
       (preview ? '<img src="' + preview + '" alt="" loading="lazy">' : '<div style="height:132px;background:linear-gradient(135deg,#1d2330,#07080b)"></div>') +
-      '<span class="wallpaper-card-meta">' + escHtml(item.title || 'Wallpaper') + '<small>' + (item.dynamic ? '动态视频 · 原始清晰度' : 'Scene · 仅可预览') + '</small></span>' +
+      '<span class="wallpaper-card-meta">' + escHtml(item.title || 'Wallpaper') + '<small>' +
+        (item.playable
+          ? (item.mediaType === 'video' ? '动态媒体 · 原始清晰度' : '图片壁纸 · 原始清晰度')
+          : '原生 Scene · 点击使用预览图') +
+      '</small></span>' +
     '</div>';
   }).join('');
 }
@@ -26351,13 +26368,15 @@ function closeWallpaperPicker() {
 function applyWallpaperEngineItem(index) {
   var item = wallpaperEngineLibrary[Number(index)];
   if (!item) return;
-  if (!item.dynamic) {
-    showToast('该壁纸是 Wallpaper Engine Scene 类型，缩略图不是原始壁纸，已阻止低清放大');
+  var playable = item.playable !== false && (item.mediaType || item.dynamic);
+  if (!playable && !item.hasPreview) {
+    showToast('该原生 Scene 没有可读取的媒体或预览图');
     return;
   }
-  var kind = item.dynamic ? 'media' : 'preview';
+  var kind = playable ? 'media' : 'preview';
+  var mediaType = playable ? (item.mediaType || (item.dynamic ? 'video' : 'image')) : 'image';
   setCustomBackgroundMedia({
-    type:item.dynamic ? 'video' : 'image',
+    type:mediaType,
     src:wallpaperMediaUrl(item, kind),
     name:item.title || 'Wallpaper Engine',
     title:item.title || '',
@@ -26369,7 +26388,7 @@ function applyWallpaperEngineItem(index) {
   updateCustomBackgroundControls();
   saveLyricLayout();
   closeWallpaperPicker();
-  showToast('Wallpaper 背景已应用 · 原始清晰度');
+  showToast(playable ? 'Wallpaper 背景已应用 · 原始清晰度' : '原生 Scene 无法直接渲染，已使用预览图背景');
 }
 function readBackgroundImageFile(file) {
   if (!file || !/^image\//i.test(file.type || '')) {

@@ -199,6 +199,46 @@ function firstExistingWallpaperFile(dir, candidates) {
   }
   return '';
 }
+function compatibleWallpaperMedia(dir, project) {
+  const supported = new Map([
+    ['.mp4', 'video'], ['.webm', 'video'], ['.mov', 'video'], ['.m4v', 'video'],
+    ['.jpg', 'image'], ['.jpeg', 'image'], ['.png', 'image'], ['.webp', 'image'], ['.gif', 'image'],
+  ]);
+  const direct = firstExistingWallpaperFile(dir, [project && project.file]);
+  if (direct && supported.has(path.extname(direct).toLowerCase())) {
+    return { file: direct, mediaType: supported.get(path.extname(direct).toLowerCase()) };
+  }
+  const candidates = [];
+  const stack = [dir];
+  let visited = 0;
+  while (stack.length && visited < 5000) {
+    const current = stack.pop();
+    let entries = [];
+    try { entries = fs.readdirSync(current, { withFileTypes: true }); } catch (_error) { continue; }
+    for (const entry of entries) {
+      if (++visited > 5000) break;
+      const target = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(target);
+        continue;
+      }
+      if (!entry.isFile() || /^preview\./i.test(entry.name)) continue;
+      const mediaType = supported.get(path.extname(entry.name).toLowerCase());
+      if (!mediaType) continue;
+      // Nested Scene image files are commonly sprites or textures, not the
+      // wallpaper itself. Only auto-promote nested video assets.
+      if (mediaType === 'image' && current !== dir) continue;
+      let size = 0;
+      try { size = fs.statSync(target).size; } catch (_error) {}
+      candidates.push({ file:target, mediaType, size });
+    }
+  }
+  candidates.sort((a, b) => {
+    if (a.mediaType !== b.mediaType) return a.mediaType === 'video' ? -1 : 1;
+    return b.size - a.size;
+  });
+  return candidates[0] || { file:'', mediaType:'' };
+}
 function scanWallpaperEngineLibrary() {
   wallpaperMediaIndex.clear();
   const results = [];
@@ -218,7 +258,8 @@ function scanWallpaperEngineLibrary() {
       try {
         const project = JSON.parse(fs.readFileSync(projectPath, 'utf8'));
         const type = String(project.type || '').toLowerCase();
-        const media = type === 'video' ? firstExistingWallpaperFile(dir, [project.file]) : '';
+        const compatible = compatibleWallpaperMedia(dir, project);
+        const media = compatible.file;
         const preview = firstExistingWallpaperFile(dir, [
           project.preview,
           'preview.jpg', 'preview.png', 'preview.jpeg', 'preview.webp', 'preview.gif'
@@ -232,14 +273,16 @@ function scanWallpaperEngineLibrary() {
         results.push({
           id: fingerprint,
           title: String(project.title || path.basename(dir)).slice(0, 160),
-          type: media ? 'video' : 'scene',
-          dynamic: !!media,
+          type: media ? compatible.mediaType : type || 'scene',
+          mediaType: compatible.mediaType || '',
+          playable: !!media,
+          dynamic: !!media && compatible.mediaType === 'video',
           hasPreview: !!preview,
         });
       } catch (_err) {}
     });
   });
-  return results.sort((a, b) => Number(b.dynamic) - Number(a.dynamic) || a.title.localeCompare(b.title, 'zh-CN'));
+  return results.sort((a, b) => Number(b.playable) - Number(a.playable) || a.title.localeCompare(b.title, 'zh-CN'));
 }
 
 async function lxApiRequest(apiPath) {
