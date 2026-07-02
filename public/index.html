@@ -23852,10 +23852,9 @@ document.getElementById('pl-list').addEventListener('click', function(e){
   var pid = card.getAttribute('data-playlist-id') || '';
   openPlaylistPanelDetail(provider, pid, card.getAttribute('data-playlist-title') || '');
 });
-document.getElementById('pl-list').addEventListener('input', function(e){
-  var input = e.target && e.target.closest ? e.target.closest('[data-pl-detail-search]') : null;
-  if (!input) return;
-  playlistPanelDetailState.query = String(input.value || '');
+var playlistDetailSearchComposing = false;
+function applyPlaylistDetailSearchValue(value) {
+  playlistPanelDetailState.query = String(value || '');
   playlistPanelDetailState.renderLimit = PLAYLIST_DETAIL_INITIAL_RENDER;
   renderPlaylistPanelDetailState();
   requestAnimationFrame(function(){
@@ -23865,6 +23864,23 @@ document.getElementById('pl-list').addEventListener('input', function(e){
     var end = next.value.length;
     try { next.setSelectionRange(end, end); } catch (_error) {}
   });
+}
+document.getElementById('pl-list').addEventListener('compositionstart', function(e){
+  if (e.target && e.target.closest && e.target.closest('[data-pl-detail-search]')) {
+    playlistDetailSearchComposing = true;
+  }
+});
+document.getElementById('pl-list').addEventListener('compositionend', function(e){
+  var input = e.target && e.target.closest ? e.target.closest('[data-pl-detail-search]') : null;
+  if (!input) return;
+  playlistDetailSearchComposing = false;
+  applyPlaylistDetailSearchValue(input.value);
+});
+document.getElementById('pl-list').addEventListener('input', function(e){
+  var input = e.target && e.target.closest ? e.target.closest('[data-pl-detail-search]') : null;
+  if (!input) return;
+  if (playlistDetailSearchComposing || e.isComposing) return;
+  applyPlaylistDetailSearchValue(input.value);
 });
 function renderMyPodcastRadioItems(key, title, items) {
   renderLocalLibraryPlaylistPanel({ animate: true });
