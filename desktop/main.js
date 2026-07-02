@@ -144,13 +144,25 @@ function waitForServer(server) {
   });
 }
 
-const LOCAL_LIBRARY_EXTS = new Set(['.mp3', '.flac', '.wav', '.ogg', '.m4a', '.lrc', '.txt', '.jpg', '.jpeg', '.png', '.webp']);
+const ENCRYPTED_AUDIO_EXTS = new Set(['.ncm', '.qmc0', '.qmc3', '.qmcflac', '.qmcogg', '.kgm', '.kgma', '.vpr', '.kwm', '.mflac', '.mgg']);
+const LOCAL_LIBRARY_EXTS = new Set(['.mp3', '.flac', '.wav', '.ogg', '.m4a', ...ENCRYPTED_AUDIO_EXTS, '.lrc', '.txt', '.jpg', '.jpeg', '.png', '.webp']);
 const LOCAL_LIBRARY_MIME = {
   '.mp3': 'audio/mpeg',
   '.flac': 'audio/flac',
   '.wav': 'audio/wav',
   '.ogg': 'audio/ogg',
   '.m4a': 'audio/mp4',
+  '.ncm': 'application/x-encrypted-audio',
+  '.qmc0': 'application/x-encrypted-audio',
+  '.qmc3': 'application/x-encrypted-audio',
+  '.qmcflac': 'application/x-encrypted-audio',
+  '.qmcogg': 'application/x-encrypted-audio',
+  '.kgm': 'application/x-encrypted-audio',
+  '.kgma': 'application/x-encrypted-audio',
+  '.vpr': 'application/x-encrypted-audio',
+  '.kwm': 'application/x-encrypted-audio',
+  '.mflac': 'application/x-encrypted-audio',
+  '.mgg': 'application/x-encrypted-audio',
   '.lrc': 'text/plain',
   '.txt': 'text/plain',
   '.jpg': 'image/jpeg',
@@ -189,6 +201,9 @@ function localFileProxyUrl(filePath) {
   return `http://127.0.0.1:${mainServerPort}/api/local-file?token=${encodeURIComponent(LOCAL_FILE_TOKEN)}&path=${encodeURIComponent(filePath)}`;
 }
 async function validateLocalAudioFile(filePath, ext) {
+  if (ENCRYPTED_AUDIO_EXTS.has(ext)) {
+    return { playable:false, encrypted:true, code:'ENCRYPTED_AUDIO', error:'检测到平台加密音频；MR 不进行破解，请先从平台导出合法的普通音频文件' };
+  }
   if (!['.mp3', '.flac', '.wav', '.ogg', '.m4a'].includes(ext)) return { playable:true, error:'' };
   try {
     const handle = await fs.promises.open(filePath, 'r');
@@ -214,6 +229,127 @@ async function validateLocalAudioFile(filePath, ext) {
   } catch (_error) {
     return { playable:false, error:'文件无法读取' };
   }
+}
+
+function findAudioSignature(data) {
+  const candidates = [];
+  const flac = data.indexOf(Buffer.from('fLaC'));
+  if (flac >= 0) candidates.push({ offset:flac, ext:'.flac' });
+  const ogg = data.indexOf(Buffer.from('OggS'));
+  if (ogg >= 0) candidates.push({ offset:ogg, ext:'.ogg' });
+  for (let i = 0; i + 12 <= data.length; i++) {
+    if (data.subarray(i, i + 4).toString('ascii') === 'RIFF' && data.subarray(i + 8, i + 12).toString('ascii') === 'WAVE') {
+      candidates.push({ offset:i, ext:'.wav' });
+      break;
+    }
+  }
+  const ftyp = data.indexOf(Buffer.from('ftyp'));
+  if (ftyp >= 4) candidates.push({ offset:ftyp - 4, ext:'.m4a' });
+  const id3 = data.indexOf(Buffer.from('ID3'));
+  if (id3 >= 0) candidates.push({ offset:id3, ext:'.mp3' });
+  for (let i = 0; i + 1 < data.length; i++) {
+    if (data[i] === 0xff && (data[i + 1] & 0xe0) === 0xe0 && (data[i + 1] & 0x06) !== 0) {
+      candidates.push({ offset:i, ext:'.mp3' });
+      break;
+    }
+  }
+  return candidates.sort((a, b) => a.offset - b.offset)[0] || null;
+}
+
+async function inspectLocalAudioForRepair(filePath) {
+  const abs = path.resolve(String(filePath || ''));
+  const ext = path.extname(abs).toLowerCase();
+  if (ENCRYPTED_AUDIO_EXTS.has(ext)) {
+    return { ok:false, code:'ENCRYPTED_AUDIO', encrypted:true, message:'检测到 NCM/QMC/KGM 等平台加密音频；MR 只识别并提示，不进行破解' };
+  }
+  const stat = await fs.promises.stat(abs);
+  const handle = await fs.promises.open(abs, 'r');
+  const buffer = Buffer.alloc(Math.min(stat.size, 1024 * 1024));
+  let bytesRead = 0;
+  try { ({ bytesRead } = await handle.read(buffer, 0, buffer.length, 0)); } finally { await handle.close(); }
+  const signature = findAudioSignature(buffer.subarray(0, bytesRead));
+  if (!signature) return { ok:false, code:'AUDIO_HEADER_INVALID', message:'未找到可识别的 MP3、FLAC、WAV、OGG 或 M4A 文件头' };
+  const repairNeeded = signature.offset > 0 || signature.ext !== ext;
+  return { ok:true, repairNeeded, offset:signature.offset, detectedExt:signature.ext, originalExt:ext };
+}
+
+function compatibleAudioCacheDir() {
+  const dir = path.join(app.getPath('userData'), 'compatible-audio');
+  fs.mkdirSync(dir, { recursive:true });
+  authorizedLocalMusicRoots.add(dir);
+  return dir;
+}
+
+async function preparedAudioEntry(filePath, suffix, ext, offset) {
+  const stat = await fs.promises.stat(filePath);
+  const key = crypto.createHash('sha1').update(path.resolve(filePath)).update(String(stat.size)).update(String(stat.mtimeMs)).update(String(offset || 0)).digest('hex');
+  const output = path.join(compatibleAudioCacheDir(), `${key}-${suffix}${ext}`);
+  if (!fs.existsSync(output)) {
+    await new Promise((resolve, reject) => {
+      const input = fs.createReadStream(filePath, { start:Math.max(0, Number(offset) || 0) });
+      const target = fs.createWriteStream(output, { flags:'wx' });
+      input.once('error', reject);
+      target.once('error', reject);
+      target.once('finish', resolve);
+      input.pipe(target);
+    }).catch(async error => {
+      if (error && error.code === 'EEXIST') return;
+      try { await fs.promises.unlink(output); } catch (_e) {}
+      throw error;
+    });
+  }
+  return localMusicEntryFromPath(output);
+}
+
+async function prepareLocalAudioForPlayback(filePath) {
+  try {
+    const inspection = await inspectLocalAudioForRepair(filePath);
+    if (!inspection.ok) return inspection;
+    if (!inspection.repairNeeded) return { ok:true, inspection, file:null };
+    const file = await preparedAudioEntry(filePath, 'header-fixed', inspection.detectedExt, inspection.offset);
+    return { ok:true, inspection, file, reused:!!file && fs.existsSync(file.fullPath) };
+  } catch (error) {
+    return { ok:false, code:'LOCAL_AUDIO_PREPARE_FAILED', message:error.message || '本地音频检查失败' };
+  }
+}
+
+function findFfmpegExecutable() {
+  const candidates = [
+    path.join(process.resourcesPath || '', 'ffmpeg.exe'),
+    path.join(process.resourcesPath || '', 'bin', 'ffmpeg.exe'),
+    path.join(path.dirname(process.execPath), 'ffmpeg.exe'),
+  ];
+  for (const candidate of candidates) if (candidate && fs.existsSync(candidate)) return candidate;
+  try {
+    const found = require('child_process').execFileSync('where.exe', ['ffmpeg.exe'], { encoding:'utf8', windowsHide:true, timeout:2500 })
+      .split(/\r?\n/).map(value => value.trim()).find(Boolean);
+    return found || '';
+  } catch (_error) {
+    return '';
+  }
+}
+
+async function transcodeLocalAudioForPlayback(filePath) {
+  const inspection = await inspectLocalAudioForRepair(filePath).catch(error => ({ ok:false, code:'LOCAL_AUDIO_INSPECT_FAILED', message:error.message }));
+  if (inspection.encrypted || inspection.code === 'ENCRYPTED_AUDIO') return inspection;
+  const ffmpeg = findFfmpegExecutable();
+  if (!ffmpeg) return { ok:false, code:'FFMPEG_NOT_FOUND', message:'未找到 ffmpeg.exe，无法创建兼容 WAV 副本' };
+  const stat = await fs.promises.stat(filePath);
+  const key = crypto.createHash('sha1').update(path.resolve(filePath)).update(String(stat.size)).update(String(stat.mtimeMs)).digest('hex');
+  const output = path.join(compatibleAudioCacheDir(), `${key}-decoded.wav`);
+  if (!fs.existsSync(output)) {
+    await new Promise((resolve, reject) => {
+      execFile(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-i', filePath, '-vn', '-acodec', 'pcm_s16le', output], {
+        windowsHide:true,
+        timeout:120000,
+        maxBuffer:2 * 1024 * 1024,
+      }, error => error ? reject(error) : resolve());
+    }).catch(async error => {
+      try { await fs.promises.unlink(output); } catch (_e) {}
+      throw error;
+    });
+  }
+  return { ok:true, file:await localMusicEntryFromPath(output), reused:fs.existsSync(output) };
 }
 
 async function localMusicEntryFromPath(filePath, relativeRoot) {
@@ -1547,7 +1683,7 @@ ipcMain.handle('mineradio-local-music-choose-files', async (event) => {
       title: '选择本地音乐、歌词或封面文件',
       properties: ['openFile', 'multiSelections'],
       filters: [
-        { name: '音乐与配套文件', extensions: ['mp3', 'flac', 'wav', 'ogg', 'm4a', 'lrc', 'txt', 'jpg', 'jpeg', 'png', 'webp'] },
+        { name: '音乐与配套文件', extensions: ['mp3', 'flac', 'wav', 'ogg', 'm4a', 'ncm', 'qmc0', 'qmc3', 'qmcflac', 'qmcogg', 'kgm', 'kgma', 'vpr', 'kwm', 'mflac', 'mgg', 'lrc', 'txt', 'jpg', 'jpeg', 'png', 'webp'] },
         { name: '所有文件', extensions: ['*'] },
       ],
     });
@@ -1588,6 +1724,18 @@ ipcMain.handle('mineradio-local-music-refresh-entries', async (_event, folderPat
     return await refreshLocalMusicFileEntries(folderPath, files);
   } catch (e) {
     return { ok: false, error: e.message || 'LOCAL_LIBRARY_REFRESH_FAILED' };
+  }
+});
+
+ipcMain.handle('mineradio-local-audio-prepare', async (_event, filePath) => {
+  return prepareLocalAudioForPlayback(filePath);
+});
+
+ipcMain.handle('mineradio-local-audio-transcode', async (_event, filePath) => {
+  try {
+    return await transcodeLocalAudioForPlayback(filePath);
+  } catch (error) {
+    return { ok:false, code:'FFMPEG_TRANSCODE_FAILED', message:error.message || 'FFmpeg 转换失败' };
   }
 });
 

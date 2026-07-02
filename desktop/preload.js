@@ -68,6 +68,8 @@ contextBridge.exposeInMainWorld('desktopWindow', {
   chooseLocalMusicFolder: () => ipcRenderer.invoke('mineradio-local-music-choose-folder'),
   scanLocalMusicFolder: (folderPath) => ipcRenderer.invoke('mineradio-local-music-scan-folder', folderPath),
   refreshLocalMusicFiles: (folderPath, files) => ipcRenderer.invoke('mineradio-local-music-refresh-entries', folderPath, files || []),
+  prepareLocalAudio: (filePath) => ipcRenderer.invoke('mineradio-local-audio-prepare', filePath),
+  transcodeLocalAudio: (filePath) => ipcRenderer.invoke('mineradio-local-audio-transcode', filePath),
   readLocalFileRange: (filePath, start, end) => ipcRenderer.invoke('mineradio-local-file-read-range', filePath, start, end),
   readLocalFileDataUrl: (filePath) => ipcRenderer.invoke('mineradio-local-file-read-data-url', filePath),
   onGlobalHotkey: (callback) => {

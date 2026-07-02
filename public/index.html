@@ -101,17 +101,23 @@ body.desktop-shell.desktop-fullscreen #top-right{top:24px}
 #custom-bg::after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.06),rgba(0,0,0,.16));opacity:var(--custom-bg-overlay-opacity,0);pointer-events:none}
 .wallpaper-picker{display:none;position:fixed;inset:0;z-index:1900;align-items:center;justify-content:center;padding:34px;background:rgba(0,0,0,.66);backdrop-filter:blur(16px)}
 .wallpaper-picker.show{display:flex}
-.wallpaper-picker-card{width:min(900px,94vw);max-height:min(760px,88vh);overflow:auto;border-radius:24px;padding:20px;background:rgba(10,11,15,.94);border:1px solid rgba(255,255,255,.14);box-shadow:0 32px 100px rgba(0,0,0,.62)}
+.wallpaper-picker-card{width:min(1080px,96vw);max-height:min(820px,90vh);overflow:auto;border-radius:24px;padding:20px;background:rgba(10,11,15,.94);border:1px solid rgba(255,255,255,.14);box-shadow:0 32px 100px rgba(0,0,0,.62)}
 .wallpaper-picker-head{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px}
-.wallpaper-picker-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
-.wallpaper-card{position:relative;min-height:132px;border-radius:16px;overflow:hidden;border:1px solid rgba(255,255,255,.10);background:#111;cursor:pointer}
-.wallpaper-card{content-visibility:auto;contain-intrinsic-size:0 132px}
-.wallpaper-card img{width:100%;height:132px;display:block;object-fit:contain;background:#050608;filter:brightness(.82) saturate(.88);transition:transform .25s,filter .25s}
-.wallpaper-card:hover img{transform:scale(1.035);filter:brightness(.88) saturate(.92)}
+.wallpaper-picker-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.wallpaper-card{position:relative;aspect-ratio:16/9;min-height:0;border-radius:18px;overflow:hidden;border:1px solid rgba(255,255,255,.12);background:#111;cursor:pointer}
+.wallpaper-card{content-visibility:auto;contain-intrinsic-size:320px 180px}
+.wallpaper-card img,.wallpaper-card-preview{position:absolute;inset:0;width:100%;height:100%;display:block;object-fit:cover;background:#050608;image-rendering:auto;filter:brightness(.96) saturate(1.02);transition:transform .25s,filter .25s}
+.wallpaper-card:hover img{transform:scale(1.025);filter:brightness(1) saturate(1.04)}
+.wallpaper-card-placeholder{position:absolute;inset:0;background:linear-gradient(135deg,#1d2330,#07080b)}
+@media (max-width:860px){.wallpaper-picker-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.wallpaper-picker{padding:12px}.wallpaper-picker-card{width:98vw;padding:14px}.wallpaper-picker-grid{grid-template-columns:1fr}}
 .wallpaper-card-meta{position:absolute;inset:auto 0 0;padding:26px 11px 10px;background:linear-gradient(transparent,rgba(0,0,0,.88));font-size:11px;color:#fff}
 .wallpaper-card-meta small{display:block;margin-top:3px;color:rgba(255,255,255,.58)}
 .wallpaper-card-hide{position:absolute;right:8px;top:8px;z-index:3;width:27px;height:27px;border:1px solid rgba(255,255,255,.18);border-radius:50%;background:rgba(0,0,0,.62);color:#fff;cursor:pointer;opacity:.72}
 .wallpaper-card-hide:hover{opacity:1;background:rgba(150,35,45,.78)}
+/* Wallpaper Engine 导入背景：保持比例铺满窗口，避免两侧黑边 */
+body.wallpaper-engine-background #custom-bg-video{object-fit:cover;background:#000}
+body.wallpaper-engine-background #custom-bg::before{background-size:cover;background-repeat:no-repeat;background-position:center}
 body.custom-background-override #custom-bg::after{background:linear-gradient(180deg,rgba(0,0,0,.018),rgba(0,0,0,.045))}
 body.custom-background-override.custom-background-flat #custom-bg::after{opacity:0!important}
 body.custom-background-video #custom-bg::before{opacity:0!important}
@@ -2074,7 +2080,7 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
 <div id="custom-bg"><video id="custom-bg-video" muted loop playsinline preload="metadata"></video></div>
 <div id="wallpaper-picker" class="wallpaper-picker" onclick="if(event.target===this)closeWallpaperPicker()">
   <div class="wallpaper-picker-card">
-    <div class="wallpaper-picker-head"><div><div class="fx-title">Wallpaper Engine 壁纸</div><div class="fx-sub">动态壁纸柔化后作为环境背景</div></div><div style="display:flex;gap:8px"><button class="fx-mini-btn ghost" type="button" onclick="restoreHiddenWallpaperItems()">恢复隐藏</button><button class="fx-mini-btn ghost" type="button" onclick="closeWallpaperPicker()">关闭</button></div></div>
+    <div class="wallpaper-picker-head"><div><div class="fx-title">Wallpaper Engine 壁纸导入</div><div class="fx-sub">点击卡片导入 Mineradio；Scene 仅导入静态预览，不会切换桌面壁纸</div></div><div style="display:flex;gap:8px"><button class="fx-mini-btn ghost" type="button" onclick="restoreHiddenWallpaperItems()">恢复隐藏</button><button class="fx-mini-btn ghost" type="button" onclick="closeWallpaperPicker()">关闭</button></div></div>
     <div id="wallpaper-picker-grid" class="wallpaper-picker-grid"></div>
   </div>
 </div>
@@ -2455,7 +2461,9 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
       <div class="fx-section-label">桌面歌词布局</div>
       <div class="fx-seg" id="desktop-lyrics-rows-seg">
         <button data-desktop-lyrics-rows="single">单行</button>
-        <button data-desktop-lyrics-rows="double">双行</button>
+        <button data-desktop-lyrics-rows="double">舞台双行</button>
+        <button data-desktop-lyrics-rows="triple">舞台三行</button>
+        <button data-desktop-lyrics-rows="quad">舞台四行</button>
       </div>
       <div class="fx-seg" id="desktop-lyrics-align-seg">
         <button data-desktop-lyrics-align="left">左对齐</button>
@@ -2872,7 +2880,7 @@ html.control-glass-svg-ok #visual-guide-btn:hover{
         <div>
           <div class="update-kicker">MINERADIO</div>
           <div id="update-modal-title" class="update-title">New release</div>
-          <div id="update-modal-version" class="update-version">v1.5.0</div>
+          <div id="update-modal-version" class="update-version">v1.5.1</div>
         </div>
       </div>
       <div class="update-hero">
@@ -3161,7 +3169,7 @@ var updatePreviewState = {
   installerPath: '',
   installerOpened: false,
   cached: false,
-  currentVersion: '1.5.0',
+  currentVersion: '1.5.1',
   version: '1.1.0',
   configured: false,
   preview: true,
@@ -3420,6 +3428,26 @@ function configurePlaybackAudioElement(el) {
     el.defaultPlaybackRate = playbackTuning.speed;
     el.playbackRate = playbackTuning.speed;
   } catch (e) {}
+  try { el.loop = playMode === 'single'; } catch (e) {}
+}
+function syncAudioSingleLoopMode() {
+  if (!audio) return false;
+  var enabled = playMode === 'single';
+  try { audio.loop = enabled; } catch (e) {}
+  return enabled;
+}
+function restartAudioForSingleLoop(fallback) {
+  if (!audio) {
+    if (typeof fallback === 'function') fallback();
+    return;
+  }
+  syncAudioSingleLoopMode();
+  try { audio.currentTime = 0; } catch (e) {}
+  Promise.resolve(attemptAudioPlay({ manual:false, silent:true, fade:false })).then(function(started){
+    if (!started && typeof fallback === 'function') fallback();
+  }).catch(function(){
+    if (typeof fallback === 'function') fallback();
+  });
 }
 function playbackPitchRatio() {
   return Math.pow(2, (Number(playbackTuning.pitch) || 0) / 12);
@@ -8645,11 +8673,21 @@ function normalizeDesktopLyricsFps(value) {
 }
 /**
  * 归一化桌面歌词行数模式，返回 overlay 可直接消费的稳定契约值。
- * @param {*} value 用户存档或按钮传入的原始值。
- * @returns {string} `single` 表示只渲染当前行，`double` 表示保留两行。
+ * 支持旧存档的 single / double，同时新增 triple / quad。
  */
 function normalizeDesktopLyricsRows(value) {
-  return String(value || '') === 'single' ? 'single' : 'double';
+  var normalized = String(value == null ? '' : value).trim().toLowerCase();
+  if (normalized === '1' || normalized === 'single') return 'single';
+  if (normalized === '3' || normalized === 'triple') return 'triple';
+  if (normalized === '4' || normalized === 'quad' || normalized === 'four') return 'quad';
+  return 'double';
+}
+function desktopLyricsRowLimit(value) {
+  var normalized = normalizeDesktopLyricsRows(value);
+  if (normalized === 'single') return 1;
+  if (normalized === 'triple') return 3;
+  if (normalized === 'quad') return 4;
+  return 2;
 }
 /**
  * 归一化桌面歌词水平对齐方式，避免未知值进入 overlay 后造成布局漂移。
@@ -20468,6 +20506,7 @@ async function startImportedAudioUrl(audioUrl) {
       audio.pause();
       audio.removeAttribute('src');
       audio.src = candidates[i];
+      syncAudioSingleLoopMode();
       audio.load();
       audio.muted = false;
       audio.__mrGesturePrimed = false;
@@ -20513,6 +20552,18 @@ async function playImportedLxInsideMineradio(song, playlistIndex, songIndex, opt
   hideBeatChip();
   audio.onended = function(){
     var list = lxMirrorPlaylists[playlistIndex];
+    if (playMode === 'single') {
+      restartAudioForSingleLoop(function(){
+        if (list && list.songs && list.songs.length && songIndex >= 0) {
+          playLxMirrorSong(playlistIndex, songIndex);
+        } else if (playQueue.length && currentIdx >= 0) {
+          playQueueAt(currentIdx, { autoRepeat:true });
+        } else {
+          playImportedLxInsideMineradio(song, playlistIndex, songIndex, { autoRepeat:true });
+        }
+      });
+      return;
+    }
     if (list && list.songs && list.songs.length) {
       var next = playMode === 'shuffle' ? Math.floor(Math.random() * list.songs.length) : (songIndex + 1) % list.songs.length;
       playLxMirrorSong(playlistIndex, next);
@@ -20542,6 +20593,9 @@ async function playImportedLxInsideMineradio(song, playlistIndex, songIndex, opt
       lastPlaybackError = e;
       var failedResolver = String(song._lastLxResolver || '');
       if (failedResolver && excludedResolvers.indexOf(failedResolver) < 0) excludedResolvers.push(failedResolver);
+      if (sourceAttempt < installedSourceCount - 1) {
+        showSourceFallbackNotice('当前音源不可用', '正在重试并切换备用音源…');
+      }
       console.warn('[LXImportedAutoSourceFallback]', failedResolver || 'unknown', e);
     }
   }
@@ -21852,6 +21906,51 @@ function localSongFileDescriptor(song) {
     type: localAudioMimeType(song)
   };
 }
+function applyPreparedLocalAudioEntry(song, file, kind) {
+  if (!song || !file) return '';
+  if (song.localBlobUrl) {
+    try { URL.revokeObjectURL(song.localBlobUrl); } catch (_error) {}
+    song.localBlobUrl = '';
+  }
+  song.localFile = file;
+  song.localFileUrl = localFileUrlFromEntry(file);
+  song.localUrl = song.localFileUrl || '';
+  song.localFilePathAbsolute = localFullPath(file) || song.localFilePathAbsolute;
+  song.localFileSize = localFileSize(file) || song.localFileSize;
+  song.localFileLastModified = localFileLastModified(file) || song.localFileLastModified;
+  song.localAudioFallbackKind = kind || '';
+  return song.localUrl;
+}
+async function prepareLocalAudioForPlayback(song) {
+  var api = desktopLocalMusicApi();
+  var file = localSongFileDescriptor(song);
+  var fullPath = localFullPath(file) || song && song.localFilePathAbsolute || '';
+  if (!api || !fullPath || typeof api.prepareLocalAudio !== 'function') return { ok:true, skipped:true };
+  var result = await api.prepareLocalAudio(fullPath);
+  song._localAudioInspection = result && (result.inspection || result);
+  if (!result || !result.ok) {
+    var error = new Error(String(result && (result.message || result.error || result.code) || '本地音频检查失败'));
+    error.code = result && result.code || 'LOCAL_AUDIO_PREPARE_FAILED';
+    throw error;
+  }
+  if (result.file) {
+    applyPreparedLocalAudioEntry(song, result.file, 'header-repair');
+    showToast(result.reused ? '已使用现有音频修复副本' : '检测到文件头异常，已创建修复副本');
+  }
+  return result;
+}
+async function transcodeLocalAudioForPlayback(song) {
+  var api = desktopLocalMusicApi();
+  var file = localSongFileDescriptor(song);
+  var fullPath = localFullPath(file) || song && song.localFilePathAbsolute || '';
+  if (!api || !fullPath || typeof api.transcodeLocalAudio !== 'function') return '';
+  var result = await api.transcodeLocalAudio(fullPath);
+  song._localAudioTranscodeResult = result || null;
+  if (!result || !result.ok || !result.file) return '';
+  var url = applyPreparedLocalAudioEntry(song, result.file, 'ffmpeg');
+  showToast(result.reused ? '已使用现有兼容解码副本' : '播放器解码失败，已通过 FFmpeg 生成兼容副本');
+  return url;
+}
 async function refreshLocalSongProxyUrl(song) {
   if (!song) return '';
   var api = desktopLocalMusicApi();
@@ -22062,6 +22161,8 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
     lxBridgePollTimer = null;
   }
   markPlayPhase('local-source');
+  // 播放前先检查文件头；轻微头部损坏或扩展名错误时自动创建兼容副本。
+  await prepareLocalAudioForPlayback(song);
   // Refresh the per-launch localhost token before every local playback.
   // Saved songs can carry a stale URL from a previous app session.
   var localUrl = await refreshLocalSongProxyUrl(song);
@@ -22084,12 +22185,18 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
   bindPlaybackProgressEvents(audio);
   applyVolumeToAudio();
   audio.src = localUrl;
+  syncAudioSingleLoopMode();
   updatePlaybackProgressUi();
   audio.onended = function(){
     if (token !== trackSwitchToken) return;
     finalizeListenSession(true);
-    if (playMode === 'single') setTimeout(function(){ playQueueAt(currentIdx, { autoRepeat: true }); }, 0);
-    else setTimeout(nextLocalQueueTrack, 0);
+    if (playMode === 'single') {
+      restartAudioForSingleLoop(function(){
+        setTimeout(function(){ playQueueAt(currentIdx, { autoRepeat:true }); }, 0);
+      });
+    } else {
+      setTimeout(nextLocalQueueTrack, 0);
+    }
   };
   audio.onloadedmetadata = function(){
     if (token !== trackSwitchToken || playQueue[idx] !== song) return;
@@ -22136,19 +22243,34 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
       localUrl = refreshedUrl;
       audio.pause();
       audio.src = localUrl;
+      syncAudioSingleLoopMode();
       audio.load();
       playbackStarted = await playAudio({ manual: !!opts.manual, silent: true });
     }
   }
 
-  // Final fallback: read the local file through Electron IPC and create a Blob
-  // URL. This path does not depend on localhost networking or proxy tokens.
+  // Final in-memory fallback: read the local file through Electron IPC and create a Blob URL.
   if (!playbackStarted) {
     var blobUrl = await createLocalAudioBlobUrl(song);
     if (blobUrl && blobUrl !== localUrl) {
       localUrl = blobUrl;
       audio.pause();
       audio.src = localUrl;
+      syncAudioSingleLoopMode();
+      audio.load();
+      playbackStarted = await playAudio({ manual: !!opts.manual, silent: true });
+    }
+  }
+
+  // Optional deep fallback: use an adjacent/system ffmpeg.exe to decode a damaged
+  // but non-encrypted file into a stable WAV copy. DRM/platform encryption is never bypassed.
+  if (!playbackStarted) {
+    var decodedUrl = await transcodeLocalAudioForPlayback(song);
+    if (decodedUrl) {
+      localUrl = decodedUrl;
+      audio.pause();
+      audio.src = localUrl;
+      syncAudioSingleLoopMode();
       audio.load();
       playbackStarted = await playAudio({ manual: !!opts.manual, silent: true });
     }
@@ -22156,7 +22278,11 @@ async function playLocalQueueItem(song, idx, opts, token, firstVisualPlay, bmKey
 
   if (!playbackStarted) {
     forcePlaybackControlsInteractive();
-    showToast(opts.manual ? '本地音乐无法解码或文件已移动，请重新选择有效的 MP3 / FLAC / WAV / OGG / M4A 文件' : '歌曲已载入，点击播放按钮继续播放');
+    var transcodeResult = song._localAudioTranscodeResult || {};
+    var failureText = transcodeResult.code === 'FFMPEG_NOT_FOUND'
+      ? '本地音乐仍无法解码；已尝试代理、内存读取和文件头修复。深度兼容需要 ffmpeg.exe。'
+      : (transcodeResult.message || '本地音乐无法解码或文件已严重损坏，请重新选择有效的 MP3 / FLAC / WAV / OGG / M4A 文件');
+    showToast(opts.manual ? failureText : '歌曲已载入，点击播放按钮继续播放');
     return;
   }
   forcePlaybackControlsInteractive();
@@ -22377,7 +22503,55 @@ if (window.desktopWindow && typeof window.desktopWindow.onTrayCommand === 'funct
     else if (command === 'mute') toggleMute();
   });
 }
+function replayCurrentTrackForStrictSingleLoop() {
+  if (playMode !== 'single') return false;
+
+  playToggleBusy = false;
+  forcePlaybackControlsInteractive();
+
+  // 已导入的落雪歌单：重新加载当前歌曲，不改变索引。
+  if (lxBridgeActive && lxActivePlaylistIndex >= 0) {
+    var list = lxMirrorPlaylists[lxActivePlaylistIndex];
+    if (list && list.songs && list.songs.length && lxActiveSongIndex >= 0) {
+      playLxMirrorSong(lxActivePlaylistIndex, lxActiveSongIndex);
+      showToast('单曲循环：重新播放当前歌曲');
+      return true;
+    }
+  }
+
+  // 外部落雪联动：将当前歌曲定位到开头，而不是发送上一首或下一首。
+  if (lxBridgeActive) {
+    Promise.resolve(lxBridgeControl('seek', 0)).then(function(ok){
+      if (ok) return lxBridgeControl('play');
+      return false;
+    }).finally(forcePlaybackControlsInteractive);
+    showToast('单曲循环：重新播放当前歌曲');
+    return true;
+  }
+
+  // Mineradio 内部播放器：优先原地归零重播，失败时重新加载当前队列项。
+  if (audio && (audio.src || currentIdx >= 0 || currentLocalSong)) {
+    restartAudioForSingleLoop(function(){
+      if (playQueue.length && currentIdx >= 0) {
+        Promise.resolve(playQueueAt(currentIdx, { autoRepeat:true }))
+          .finally(forcePlaybackControlsInteractive);
+      }
+    });
+    showToast('单曲循环：重新播放当前歌曲');
+    return true;
+  }
+
+  if (playQueue.length && currentIdx >= 0) {
+    Promise.resolve(playQueueAt(currentIdx, { autoRepeat:true }))
+      .finally(forcePlaybackControlsInteractive);
+    showToast('单曲循环：重新播放当前歌曲');
+    return true;
+  }
+
+  return false;
+}
 function nextTrack() {
+  if (replayCurrentTrackForStrictSingleLoop()) return;
   if (lxBridgeActive && lxActivePlaylistIndex >= 0) {
     var list = lxMirrorPlaylists[lxActivePlaylistIndex];
     if (!list || !list.songs || !list.songs.length) return;
@@ -22402,6 +22576,7 @@ function nextLocalQueueTrack() {
   Promise.resolve(playQueueAt(currentIdx)).finally(forcePlaybackControlsInteractive);
 }
 function prevTrack() {
+  if (replayCurrentTrackForStrictSingleLoop()) return;
   if (lxBridgeActive && lxActivePlaylistIndex >= 0) {
     var list = lxMirrorPlaylists[lxActivePlaylistIndex];
     if (!list || !list.songs || !list.songs.length) return;
@@ -22462,6 +22637,7 @@ function playModeIconMarkup(mode) {
 }
 
 function updatePlayModeButton(animate) {
+  syncAudioSingleLoopMode();
   var label = playModeLabel(playMode);
   var chip = document.getElementById('play-mode-chip');
   var btn = document.getElementById('play-mode-btn');
@@ -24209,8 +24385,8 @@ setInterval(function(){
 // ============================================================
 //  文件拖放
 // ============================================================
-var LOCAL_AUDIO_FILE_RE = /\.(mp3|flac|wav|ogg|m4a)$/i;
-var LOCAL_FOLDER_AUDIO_FILE_RE = /\.(mp3|flac|wav|ogg|m4a)$/i;
+var LOCAL_AUDIO_FILE_RE = /\.(mp3|flac|wav|ogg|m4a|ncm|qmc0|qmc3|qmcflac|qmcogg|kgm|kgma|vpr|kwm|mflac|mgg)$/i;
+var LOCAL_FOLDER_AUDIO_FILE_RE = /\.(mp3|flac|wav|ogg|m4a|ncm|qmc0|qmc3|qmcflac|qmcogg|kgm|kgma|vpr|kwm|mflac|mgg)$/i;
 var LOCAL_LYRIC_FILE_RE = /\.(lrc|txt)$/i;
 var LOCAL_COVER_FILE_RE = /\.(jpg|jpeg|png|webp)$/i;
 var LOCAL_COVER_NAME_RE = /^(cover|folder|front|album|artwork|封面|专辑封面)$/i;
@@ -24405,7 +24581,7 @@ function createLocalSongsFromFiles(files, opts) {
   var lyricMaps = buildLocalLyricMaps(list);
   var coverMaps = buildLocalCoverMaps(list);
   return list
-    .filter(function(file){ return isLocalAudioFile(file, !!opts.folderOnly) && file.playable !== false; })
+    .filter(function(file){ return isLocalAudioFile(file, !!opts.folderOnly); })
     .sort(function(a, b){ return localFilePath(a).localeCompare(localFilePath(b), 'zh-Hans-CN', { numeric: true, sensitivity: 'base' }); })
     .map(function(file){ return makeLocalSongFromFile(file, findLocalLyricFile(file, lyricMaps), findLocalCoverFile(file, coverMaps)); });
 }
@@ -25529,15 +25705,10 @@ function analyzeLocalLibraryDuplicates(songs) {
 }
 async function handleLocalFolderFiles(files, opts) {
   opts = opts || {};
-  var rejectedAudioCount = (files || []).filter(function(file){
-    return isLocalAudioFile(file, !!opts.folderOnly) && file.playable === false;
-  }).length;
   var songs = createLocalSongsFromFiles(files, { folderOnly: !!opts.folderOnly });
   var duplicateStats = analyzeLocalLibraryDuplicates(songs);
   if (!songs.length) {
-    showToast(rejectedAudioCount
-      ? ('检测到 ' + rejectedAudioCount + ' 个损坏、加密或伪装的音频文件，已跳过')
-      : (opts.folderOnly ? '文件夹里没有找到 MP3 / FLAC 音乐' : '没有找到可播放的本地音乐'));
+    showToast(opts.folderOnly ? '文件夹里没有找到 MP3 / FLAC 音乐' : '没有找到可播放的本地音乐');
     return;
   }
   var libraryFolderPath = opts.folderPath || savedLocalLibraryFolderPath();
@@ -26402,11 +26573,6 @@ async function loadWallpaperEngineLibrary(showNotice) {
   try {
     var result = await apiJson('/api/wallpaper/list?t=' + Date.now());
     wallpaperEngineLibrary = result && Array.isArray(result.wallpapers) ? result.wallpapers : [];
-    var currentWallpaperMedia = fx && fx.backgroundMedia;
-    if (currentWallpaperMedia && currentWallpaperMedia.wallpaper && /[?&]kind=preview(?:&|$)/i.test(String(currentWallpaperMedia.src || ''))) {
-      setCustomBackgroundMedia(null, true);
-      showToast('已移除低清 Scene 预览背景，请重新选择高清壁纸');
-    }
     renderWallpaperPicker();
     if (showNotice) showToast(wallpaperEngineLibrary.length ? ('已找到 ' + wallpaperEngineLibrary.length + ' 个 Wallpaper 壁纸') : '没有找到可用的 Wallpaper 壁纸');
     return wallpaperEngineLibrary;
@@ -26420,23 +26586,47 @@ async function loadWallpaperEngineLibrary(showNotice) {
 function wallpaperMediaUrl(item, kind) {
   return '/api/wallpaper/media?id=' + encodeURIComponent(item.id) + '&kind=' + encodeURIComponent(kind);
 }
+function normalizeWallpaperListTitle(value) {
+  return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+function getUniqueWallpaperEntries() {
+  var seen = new Set();
+  return wallpaperEngineLibrary.map(function(item, index){ return { item:item, index:index }; })
+    .filter(function(entry){
+      var item = entry.item || {};
+      if (!(item.playable || item.hasPreview) || hiddenWallpaperIds.has(String(item.id))) return false;
+      var key = String(item.dedupeKey || '').trim();
+      if (!key) {
+        key = [
+          normalizeWallpaperListTitle(item.title),
+          String(item.projectType || ''),
+          item.playable ? String(item.mediaType || item.type || 'media') : 'scene-preview'
+        ].join('|');
+      }
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
 function renderWallpaperPicker() {
   var grid = document.getElementById('wallpaper-picker-grid');
   if (!grid) return;
-  var visibleItems = wallpaperEngineLibrary.map(function(item, index){ return { item:item, index:index }; })
-    .filter(function(entry){ return entry.item.playable && !hiddenWallpaperIds.has(String(entry.item.id)); });
+  var visibleItems = getUniqueWallpaperEntries();
   if (!visibleItems.length) {
-    grid.innerHTML = '<div style="grid-column:1/-1;padding:36px;text-align:center;color:rgba(255,255,255,.42)">没有找到可用壁纸</div>';
+    grid.innerHTML = '<div style="grid-column:1/-1;padding:36px;text-align:center;color:rgba(255,255,255,.42)">没有找到可导入的壁纸</div>';
     return;
   }
   grid.innerHTML = visibleItems.map(function(entry){
     var item = entry.item, index = entry.index;
     var preview = item.hasPreview ? wallpaperMediaUrl(item, 'preview') : '';
-    return '<div class="wallpaper-card" role="button" tabindex="0" onclick="applyWallpaperEngineItem(' + index + ')">' +
+    var scenePreviewOnly = (item.projectType === 'scene' || item.nativeScene) && !item.playable;
+    return '<div class="wallpaper-card" role="button" tabindex="0" onclick="importWallpaperEngineItem(' + index + ')">' +
       '<button class="wallpaper-card-hide" type="button" title="从 MR 隐藏" onclick="event.stopPropagation();hideWallpaperEngineItem(' + index + ')">×</button>' +
-      (preview ? '<img src="' + preview + '" alt="" loading="lazy">' : '<div style="height:132px;background:linear-gradient(135deg,#1d2330,#07080b)"></div>') +
+      (preview ? '<img src="' + preview + '" alt="" loading="lazy" decoding="async">' : '<div class="wallpaper-card-placeholder"></div>') +
       '<span class="wallpaper-card-meta">' + escHtml(item.title || 'Wallpaper') + '<small>' +
-        (item.mediaType === 'video' ? '动态媒体 · 原始清晰度' : '图片壁纸 · 原始清晰度') +
+        (scenePreviewOnly
+          ? 'Scene · 点击导入 MR（静态预览）'
+          : (item.mediaType === 'video' ? '动态媒体 · 点击导入 MR' : '图片壁纸 · 点击导入 MR')) +
       '</small></span>' +
     '</div>';
   }).join('');
@@ -26468,30 +26658,45 @@ function closeWallpaperPicker() {
   var picker = document.getElementById('wallpaper-picker');
   if (picker) picker.classList.remove('show');
 }
-function applyWallpaperEngineItem(index) {
+async function importWallpaperEngineItem(index) {
   var item = wallpaperEngineLibrary[Number(index)];
   if (!item) return;
-  var playable = item.playable && (item.mediaType || item.dynamic);
-  if (!playable) {
-    showToast('该壁纸没有可读取的高清原始媒体');
+
+  var hasPlayableMedia = !!item.playable;
+  var hasScenePreview = !!item.hasPreview;
+  if (!hasPlayableMedia && !hasScenePreview) {
+    showToast('该壁纸没有可导入的媒体或预览图');
     return;
   }
-  var kind = 'media';
-  var mediaType = item.mediaType || (item.dynamic ? 'video' : 'image');
+
+  var isScenePreview = !hasPlayableMedia && hasScenePreview &&
+    (item.projectType === 'scene' || item.nativeScene);
+  var kind = hasPlayableMedia ? 'media' : 'preview';
+  var mediaType = hasPlayableMedia
+    ? (item.mediaType || (item.dynamic ? 'video' : 'image'))
+    : 'image';
+
   setCustomBackgroundMedia({
-    type:mediaType,
-    src:wallpaperMediaUrl(item, kind),
-    name:item.title || 'Wallpaper Engine',
-    title:item.title || '',
-    wallpaper:true
+    type: mediaType,
+    src: wallpaperMediaUrl(item, kind),
+    name: (item.title || 'Wallpaper Engine') + (isScenePreview ? '（Scene 静态预览）' : ''),
+    title: item.title || '',
+    wallpaper: true,
+    wallpaperImported: true,
+    scenePreview: isScenePreview
   }, true);
-  // Wallpaper 与本地导入媒体使用完全相同的显示参数：原始亮度、100% 不透明度、无额外滤镜。
+
   fx.backgroundOpacity = 1;
   wallpaperCoverExpanded = false;
   updateCustomBackgroundControls();
   saveLyricLayout();
   closeWallpaperPicker();
-  showToast('Wallpaper 背景已应用 · 完整画面 · 原始清晰度');
+
+  if (isScenePreview) {
+    showToast('Scene 已导入 Mineradio（静态预览），未切换桌面壁纸');
+  } else {
+    showToast('壁纸已导入 Mineradio 并应用');
+  }
 }
 function readBackgroundImageFile(file) {
   if (!file || !/^image\//i.test(file.type || '')) {
@@ -28134,7 +28339,10 @@ function bindFxPanel() {
       updateDesktopLyricsLayoutControls();
       saveLyricLayout();
       pushDesktopLyricsState(true);
-      showToast(fx.desktopLyricsRows === 'single' ? '桌面歌词单行显示' : '桌面歌词双行显示');
+      var rowLabel = fx.desktopLyricsRows === 'single' ? '单行'
+        : (fx.desktopLyricsRows === 'triple' ? '三行'
+        : (fx.desktopLyricsRows === 'quad' ? '四行' : '双行'));
+      showToast('桌面歌词' + rowLabel + '显示');
     });
   });
   document.querySelectorAll('#desktop-lyrics-align-seg [data-desktop-lyrics-align]').forEach(function(btn){
@@ -31511,7 +31719,7 @@ function currentDesktopSongMeta() {
   };
 }
 function normalizeDesktopLyricText(text, maxLines) {
-  maxLines = normalizeDesktopLyricsRows(maxLines || (fx && fx.desktopLyricsRows)) === 'single' ? 1 : 2;
+  maxLines = desktopLyricsRowLimit(maxLines || (fx && fx.desktopLyricsRows));
   return String(text || '')
     .replace(/\r/g, '\n')
     .split('\n')
@@ -31520,45 +31728,164 @@ function normalizeDesktopLyricText(text, maxLines) {
     .slice(0, maxLines)
     .join('\n');
 }
+function desktopLyricRowsFromText(text) {
+  return String(text || '')
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .map(function(line){ return line.replace(/[ \t]+/g, ' ').trim(); })
+    .filter(Boolean);
+}
+function desktopLyricProgressScale(fullText, currentText) {
+  var fullUnits = Array.from(String(fullText || '').replace(/\n/g, '')).length;
+  var currentUnits = Array.from(String(currentText || '').replace(/\n/g, '')).length;
+  if (!fullUnits || !currentUnits || currentUnits >= fullUnits) return 1;
+  return clampRange(currentUnits / fullUnits, 0.05, 1);
+}
+function desktopLyricStageIndices(currentIndex, rowMode, lineCount) {
+  var mode = normalizeDesktopLyricsRows(rowMode);
+  var candidates;
+  if (mode === 'single') candidates = [currentIndex];
+  else if (mode === 'double') candidates = [currentIndex, currentIndex + 1];
+  else if (mode === 'triple') candidates = [currentIndex - 1, currentIndex, currentIndex + 1];
+  else candidates = [currentIndex - 1, currentIndex, currentIndex + 1, currentIndex + 2];
+
+  var seen = {};
+  return candidates.filter(function(index){
+    if (index < 0 || index >= lineCount || seen[index]) return false;
+    seen[index] = true;
+    return true;
+  });
+}
+function desktopLyricStageItems(lines, currentIndex, rowMode) {
+  if (!Array.isArray(lines) || currentIndex < 0 || currentIndex >= lines.length) return [];
+  var indices = desktopLyricStageIndices(currentIndex, rowMode, lines.length);
+  var items = [];
+
+  indices.forEach(function(sourceIndex){
+    var sourceText = lyricDisplayText(lines[sourceIndex]);
+    var rows = desktopLyricRowsFromText(sourceText).slice(0, 2);
+    var distance = sourceIndex - currentIndex;
+    var role = distance < 0 ? 'past' : (distance > 0 ? 'future' : 'current');
+
+    rows.forEach(function(text, rowIndex){
+      items.push({
+        id: sourceIndex + ':' + rowIndex + ':' + text,
+        text: text,
+        role: role,
+        distance: distance,
+        sourceIndex: sourceIndex,
+        variant: rowIndex === 0 ? 'main' : 'translation'
+      });
+    });
+  });
+
+  if (items.length <= 6) return items;
+  var currentItems = items.filter(function(item){ return item.role === 'current'; });
+  var otherItems = items.filter(function(item){ return item.role !== 'current'; });
+  var before = otherItems.filter(function(item){ return item.distance < 0; }).slice(-2);
+  var after = otherItems.filter(function(item){ return item.distance > 0; }).slice(0, Math.max(0, 6 - currentItems.length - before.length));
+  return before.concat(currentItems, after).slice(0, 6);
+}
+function desktopLyricFallbackItems(text) {
+  return desktopLyricRowsFromText(text).slice(0, 2).map(function(row, index){
+    return {
+      id: 'fallback:' + index + ':' + row,
+      text: row,
+      role: 'current',
+      distance: 0,
+      sourceIndex: -1,
+      variant: index === 0 ? 'main' : 'translation'
+    };
+  });
+}
 function currentDesktopLyricSnapshot() {
   var t = audio && isFinite(audio.currentTime) ? Number(audio.currentTime) : 0;
   var lines = Array.isArray(lyricsLines) ? lyricsLines : [];
+  var rowMode = normalizeDesktopLyricsRows(fx && fx.desktopLyricsRows);
+
   if (playing && audio && lines.length) {
     var idx = -1;
     for (var i = 0; i < lines.length; i++) {
       if (lines[i].t <= t + 0.05) idx = i;
       else break;
     }
+
     if (idx >= 0) {
       var curLine = lines[idx] || { t:t, text:'' };
       var nextLine = lines[idx + 1];
-      var nextT = nextLine && nextLine.t > curLine.t ? nextLine.t : Math.min((audio && audio.duration) || t + 4, curLine.t + (curLine.duration || 4.8));
+      var nextT = nextLine && nextLine.t > curLine.t
+        ? nextLine.t
+        : Math.min((audio && audio.duration) || t + 4, curLine.t + (curLine.duration || 4.8));
       var span = Math.max(0.75, nextT - curLine.t);
+      var items = desktopLyricStageItems(lines, idx, rowMode);
+
+      if (!items.length) {
+        items = desktopLyricFallbackItems(currentLyricFallbackText());
+      }
+
+      var currentRows = items.filter(function(item){ return item.role === 'current'; });
+      var currentText = currentRows.map(function(item){ return item.text; }).join('\n');
+      var allText = items.map(function(item){ return item.text; }).join('\n');
+
       return {
-        text: normalizeDesktopLyricText(lyricDisplayText(curLine) || currentLyricFallbackText()),
+        text: currentText || allText || currentLyricFallbackText(),
+        items: items,
+        stageKey: items.map(function(item){ return item.id + ':' + item.role; }).join('|'),
         progress: getLyricLineProgress(curLine, nextLine, t),
-        progressSpan: span
+        progressSpan: span,
+        progressScale: 1
       };
     }
-    var introText = normalizeDesktopLyricText(currentLyricFallbackText());
+
+    var introText = normalizeDesktopLyricText(currentLyricFallbackText(), 2);
     if (introText) {
       var firstLine = lines[0];
-      var introEnd = firstLine && firstLine.t > 0 ? firstLine.t : Math.min((audio && audio.duration) || 4.8, 4.8);
+      var introEnd = firstLine && firstLine.t > 0
+        ? firstLine.t
+        : Math.min((audio && audio.duration) || 4.8, 4.8);
+      var introItems = desktopLyricFallbackItems(introText);
       return {
         text: introText,
-        progress: getLyricLineProgress({ t:0, text:introText, duration:Math.max(0.8, introEnd), charCount:Math.max(1, introText.length), fallback:true }, null, t),
-        progressSpan: Math.max(0.8, introEnd)
+        items: introItems,
+        stageKey: introItems.map(function(item){ return item.id; }).join('|'),
+        progress: getLyricLineProgress({
+          t:0,
+          text:introText,
+          duration:Math.max(0.8, introEnd),
+          charCount:Math.max(1, introText.length),
+          fallback:true
+        }, null, t),
+        progressSpan: Math.max(0.8, introEnd),
+        progressScale: 1
       };
     }
   }
+
   if (stageLyrics && stageLyrics.currentText) {
+    var stageText = normalizeDesktopLyricText(stageLyrics.currentText, 2);
+    var stageItems = desktopLyricFallbackItems(stageText);
     return {
-      text: normalizeDesktopLyricText(stageLyrics.currentText),
-      progress: stageLyrics.current && stageLyrics.current.userData ? clampRange(Number(stageLyrics.current.userData.lastLyricProgress) || 0, 0, 1) : 0,
-      progressSpan: 4.8
+      text: stageText,
+      items: stageItems,
+      stageKey: stageItems.map(function(item){ return item.id; }).join('|'),
+      progress: stageLyrics.current && stageLyrics.current.userData
+        ? clampRange(Number(stageLyrics.current.userData.lastLyricProgress) || 0, 0, 1)
+        : 0,
+      progressSpan: 4.8,
+      progressScale: 1
     };
   }
-  return { text: normalizeDesktopLyricText(currentDesktopSongMeta().title || 'Mineradio'), progress: 0, progressSpan: 4.8 };
+
+  var fallbackText = normalizeDesktopLyricText(currentDesktopSongMeta().title || 'Mineradio', 2);
+  var fallbackItems = desktopLyricFallbackItems(fallbackText);
+  return {
+    text: fallbackText,
+    items: fallbackItems,
+    stageKey: fallbackItems.map(function(item){ return item.id; }).join('|'),
+    progress: 0,
+    progressSpan: 4.8,
+    progressScale: 1
+  };
 }
 function desktopOverlayColorValue(value, fallback) {
   var raw = String(value || '').trim();
@@ -31638,8 +31965,11 @@ function desktopLyricsPayload(forceBeatMap) {
   var payload = {
     enabled: !!fx.desktopLyrics && !isDevelopmentLockedFx('desktopLyrics'),
     text: lyric.text,
+    items: Array.isArray(lyric.items) ? lyric.items : [],
+    stageKey: lyric.stageKey || '',
     progress: lyric.progress,
     progressSpan: lyric.progressSpan,
+    progressScale: clampRange(Number(lyric.progressScale) || 1, 0.05, 1),
     title: meta.title,
     artist: meta.artist,
     playing: !!playing,
@@ -31689,7 +32019,7 @@ function pushDesktopLyricsState(force) {
   var payload = desktopLyricsPayload(!!force);
   var colors = payload.colors || {};
   var motion = payload.motion || {};
-  var key = payload.enabled + '|' + payload.text + '|' + Math.round(payload.progress * 1000) + '|' + Math.round((payload.progressSpan || 0) * 100) + '|' + payload.playing + '|' + payload.size + '|' + payload.opacity + '|' + payload.y + '|' + payload.clickThrough + '|' + payload.cinema + '|' + payload.lyricMotion + '|' + payload.highlightFollow + '|' + payload.frameRate + '|' + payload.fontFamily + '|' + payload.fontWeight + '|' + payload.letterSpacing + '|' + payload.lineHeight + '|' + payload.lyricScale + '|' + payload.feather + '|' + payload.beatMapKey + '|' + colors.primary + '|' + colors.secondary + '|' + colors.highlight + '|' + colors.glow + '|' + motion.lyricGlow + '|' + motion.lyricGlowBeat + '|' + Math.round((motion.lyricGlowStrength || 0) * 100) + '|' + Math.round((motion.highBloom || 0) * 100) + '|' + Math.round((motion.beatGlow || 0) * 100) + '|' + Math.round((motion.beatPulse || 0) * 100) + '|' + Math.round((motion.bass || 0) * 100);
+  var key = payload.enabled + '|' + payload.text + '|' + payload.stageKey + '|' + Math.round(payload.progress * 1000) + '|' + Math.round((payload.progressSpan || 0) * 100) + '|' + Math.round((payload.progressScale || 1) * 1000) + '|' + payload.rows + '|' + payload.align + '|' + payload.playing + '|' + payload.size + '|' + payload.opacity + '|' + payload.y + '|' + payload.clickThrough + '|' + payload.cinema + '|' + payload.lyricMotion + '|' + payload.highlightFollow + '|' + payload.frameRate + '|' + payload.fontFamily + '|' + payload.fontWeight + '|' + payload.letterSpacing + '|' + payload.lineHeight + '|' + payload.lyricScale + '|' + payload.feather + '|' + payload.beatMapKey + '|' + colors.primary + '|' + colors.secondary + '|' + colors.highlight + '|' + colors.glow + '|' + motion.lyricGlow + '|' + motion.lyricGlowBeat + '|' + Math.round((motion.lyricGlowStrength || 0) * 100) + '|' + Math.round((motion.highBloom || 0) * 100) + '|' + Math.round((motion.beatGlow || 0) * 100) + '|' + Math.round((motion.beatPulse || 0) * 100) + '|' + Math.round((motion.bass || 0) * 100);
   if (!force && key === desktopOverlayPushState.lastLyricsKey && now - desktopOverlayPushState.lyricsAt < 900) return;
   desktopOverlayPushState.lyricsAt = now;
   desktopOverlayPushState.lastLyricsKey = key;

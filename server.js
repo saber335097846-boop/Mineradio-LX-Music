@@ -239,6 +239,38 @@ function compatibleWallpaperMedia(dir, project) {
   });
   return candidates[0] || { file:'', mediaType:'' };
 }
+function bestWallpaperPreview(dir, project) {
+  const preferred = firstExistingWallpaperFile(dir, [
+    project && project.preview,
+    project && project.cover,
+    project && project.poster,
+    'preview.jpg', 'preview.png', 'preview.jpeg', 'preview.webp',
+    'cover.jpg', 'cover.png', 'poster.jpg', 'poster.png',
+  ]);
+  const candidates = [];
+  if (preferred) {
+    try { candidates.push({ file:preferred, size:fs.statSync(preferred).size, priority:2 }); } catch (_error) {}
+  }
+  const stack = [dir];
+  let visited = 0;
+  while (stack.length && visited < 3000) {
+    const current = stack.pop();
+    let entries = [];
+    try { entries = fs.readdirSync(current, { withFileTypes:true }); } catch (_error) { continue; }
+    for (const entry of entries) {
+      if (++visited > 3000) break;
+      const target = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        stack.push(target);
+        continue;
+      }
+      if (!entry.isFile() || !/^(?:preview|cover|poster|thumbnail)[^/]*\.(?:jpe?g|png|webp)$/i.test(entry.name)) continue;
+      try { candidates.push({ file:target, size:fs.statSync(target).size, priority:current === dir ? 2 : 1 }); } catch (_error) {}
+    }
+  }
+  candidates.sort((a, b) => b.priority - a.priority || b.size - a.size);
+  return candidates[0] && candidates[0].file || '';
+}
 function wallpaperContentFingerprint(file) {
   if (!file) return '';
   try {
@@ -277,10 +309,7 @@ function scanWallpaperEngineLibrary() {
         const type = String(project.type || '').toLowerCase();
         const compatible = compatibleWallpaperMedia(dir, project);
         const media = compatible.file;
-        const preview = firstExistingWallpaperFile(dir, [
-          project.preview,
-          'preview.jpg', 'preview.png', 'preview.jpeg', 'preview.webp', 'preview.gif'
-        ]);
+        const preview = bestWallpaperPreview(dir, project);
         if (!media && !preview) return;
         const fingerprint = crypto.createHash('sha1').update(projectPath).digest('hex').slice(0, 18);
         if (seen.has(fingerprint)) return;
@@ -294,10 +323,12 @@ function scanWallpaperEngineLibrary() {
           id: fingerprint,
           title: String(project.title || path.basename(dir)).slice(0, 160),
           type: media ? compatible.mediaType : type || 'scene',
+          projectType: type || '',
           mediaType: compatible.mediaType || '',
           playable: !!media,
           dynamic: !!media && compatible.mediaType === 'video',
           hasPreview: !!preview,
+          dedupeKey: contentFingerprint || fingerprint,
         });
       } catch (_err) {}
     });

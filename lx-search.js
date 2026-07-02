@@ -37,13 +37,24 @@ async function fetchJson(url, options = {}) {
           ...(fetchOptions.headers || {}),
         },
       });
-      if (!response.ok) throw new Error(`HTTP_${response.status}`);
+      if (!response.ok) {
+        const error = new Error(`HTTP_${response.status}`);
+        const retryAfter = response.headers && response.headers.get && response.headers.get('retry-after');
+        if (retryAfter) {
+          const seconds = Number(retryAfter);
+          const dateDelay = Date.parse(retryAfter) - Date.now();
+          error.retryAfterMs = Number.isFinite(seconds) ? seconds * 1000 : Math.max(0, dateDelay);
+        }
+        throw error;
+      }
       return await response.json();
     } catch (error) {
       lastError = error;
       const retryable = /HTTP_(?:429|5\d\d)|abort|timeout|fetch|network|socket|ECONN|ENOTFOUND/i.test(String(error && (error.message || error)));
       if (!retryable || attempt >= 2) throw error;
-      await new Promise(resolve => setTimeout(resolve, 280 * (attempt + 1)));
+      const exponentialDelay = 350 * (2 ** attempt);
+      const retryAfterDelay = Math.min(10000, Math.max(0, Number(error.retryAfterMs) || 0));
+      await new Promise(resolve => setTimeout(resolve, Math.max(exponentialDelay, retryAfterDelay)));
     } finally {
       clearTimeout(timer);
     }
@@ -199,6 +210,12 @@ async function searchMg(query, limit) {
 
 const PROVIDERS = { tx: searchTx, wy: searchWy, kw: searchKw, kg: searchKg, mg: searchMg };
 const searchCache = new Map();
+const providerHealth = new Map();
+
+function providerState(source) {
+  if (!providerHealth.has(source)) providerHealth.set(source, { failures:0, cooldownUntil:0 });
+  return providerHealth.get(source);
+}
 
 async function searchAll(query, options = {}) {
   query = String(query || '').trim();
@@ -208,13 +225,24 @@ async function searchAll(query, options = {}) {
   const cacheKey = `${requested.join(',')}|${limit}|${query.toLowerCase()}`;
   const cached = searchCache.get(cacheKey);
   if (cached && Date.now() - cached.time < 2 * 60 * 1000) return cached.value;
-  const settled = await Promise.allSettled(requested.map(source => PROVIDERS[source](query, limit)));
+  const now = Date.now();
+  const active = requested.filter(source => requested.length === 1 || providerState(source).cooldownUntil <= now);
+  const cooled = requested.filter(source => !active.includes(source));
+  const settled = await Promise.allSettled(active.map(source => PROVIDERS[source](query, limit)));
   const songs = [];
-  const failures = [];
+  const failures = cooled.map(source => ({ source, name:SOURCE_NAMES[source], error:'SOURCE_COOLDOWN' }));
   settled.forEach((result, index) => {
-    const source = requested[index];
-    if (result.status === 'fulfilled') songs.push(...result.value);
-    else failures.push({ source, name: SOURCE_NAMES[source], error: result.reason?.message || 'SEARCH_FAILED' });
+    const source = active[index];
+    const health = providerState(source);
+    if (result.status === 'fulfilled') {
+      songs.push(...result.value);
+      health.failures = 0;
+      health.cooldownUntil = 0;
+    } else {
+      health.failures += 1;
+      if (health.failures >= 3) health.cooldownUntil = Date.now() + Math.min(120000, 15000 * (health.failures - 1));
+      failures.push({ source, name: SOURCE_NAMES[source], error: result.reason?.message || 'SEARCH_FAILED' });
+    }
   });
   const seen = new Set();
   const value = {

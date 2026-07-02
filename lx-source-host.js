@@ -579,6 +579,7 @@ function extractHttpUrl(value, depth = 0) {
   return '';
 }
 
+const musicUrlCache = new Map();
 async function resolveMusicUrl(source, musicInfo, quality, options) {
   options = options || {};
   const excludedResolvers = new Set((Array.isArray(options.excludeResolvers) ? options.excludeResolvers : [])
@@ -594,6 +595,13 @@ async function resolveMusicUrl(source, musicInfo, quality, options) {
     '128k': ['128k'],
   };
   const normalizedInfo = normalizeMusicInfo(source, musicInfo);
+  const cacheKey = [
+    source,
+    normalizedInfo.songmid || normalizedInfo.id || normalizedInfo.hash || normalizedInfo.copyrightId || '',
+    requested,
+  ].join('|');
+  const cached = musicUrlCache.get(cacheKey);
+  if (!excludedResolvers.size && cached && Date.now() - cached.time < 90 * 1000) return cached.value;
   const activeHost = await getRuntime();
   const hostPromises = [Promise.resolve(activeHost)];
   for (const record of allScriptRecords()) {
@@ -641,10 +649,15 @@ async function resolveMusicUrl(source, musicInfo, quality, options) {
     throw new Error(errors.join(';') || 'LX_SOURCE_RESOLVE_FAILED');
   });
   try {
-    return await Promise.race([
+    const value = await Promise.race([
       Promise.any(attempts),
       new Promise((_, reject) => setTimeout(() => reject(new Error('所有音源解析超时')), 45000)),
     ]);
+    if (value && value.url) {
+      musicUrlCache.set(cacheKey, { time:Date.now(), value });
+      if (musicUrlCache.size > 120) musicUrlCache.delete(musicUrlCache.keys().next().value);
+    }
+    return value;
   } catch (error) {
     if (error && error.message === '所有音源解析超时') throw error;
     const reasons = error && Array.isArray(error.errors)
