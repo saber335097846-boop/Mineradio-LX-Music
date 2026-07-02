@@ -31779,12 +31779,9 @@ function desktopLyricStageItems(lines, currentIndex, rowMode) {
     });
   });
 
-  if (items.length <= 6) return items;
-  var currentItems = items.filter(function(item){ return item.role === 'current'; });
-  var otherItems = items.filter(function(item){ return item.role !== 'current'; });
-  var before = otherItems.filter(function(item){ return item.distance < 0; }).slice(-2);
-  var after = otherItems.filter(function(item){ return item.distance > 0; }).slice(0, Math.max(0, 6 - currentItems.length - before.length));
-  return before.concat(currentItems, after).slice(0, 6);
+  // Keep every selected source line. Each source may contain an original and a
+  // translation row, so a four-line stage can legitimately carry eight items.
+  return items;
 }
 function desktopLyricFallbackItems(text) {
   return desktopLyricRowsFromText(text).slice(0, 2).map(function(row, index){

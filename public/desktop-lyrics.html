@@ -110,6 +110,45 @@
       backface-visibility:hidden;
       will-change:opacity,filter,transform,background;
     }
+    .desktop-lyric-row{
+      display:block;
+      padding:.10em .12em;
+      color:var(--lyric-primary);
+      -webkit-text-fill-color:var(--lyric-primary);
+      text-shadow:0 0 1px rgba(255,255,255,.28),0 0 calc(6px + var(--lyric-css-beat-glow)) var(--lyric-shadow-soft);
+      opacity:.55;
+      transform:scale(.78);
+      transform-origin:center;
+      transition:opacity .22s ease,transform .22s ease,filter .22s ease;
+      white-space:nowrap;
+    }
+    .desktop-lyric-row.past{opacity:.36;filter:blur(.25px)}
+    .desktop-lyric-row.future{opacity:.52}
+    .desktop-lyric-row.current{
+      opacity:1;
+      transform:scale(1);
+      background:linear-gradient(90deg,
+        var(--lyric-highlight) 0%,
+        var(--lyric-highlight) max(0%,calc(var(--lyric-progress) - var(--lyric-feather))),
+        var(--lyric-glow) calc(var(--lyric-progress) + 1.2%),
+        var(--lyric-primary) calc(var(--lyric-progress) + var(--lyric-feather)),
+        var(--lyric-primary) 100%);
+      -webkit-background-clip:text;
+      background-clip:text;
+      -webkit-text-fill-color:transparent;
+      text-shadow:0 0 1px rgba(255,255,255,.34),0 0 calc(8px + var(--lyric-css-beat-glow)) var(--lyric-shadow-soft),0 0 calc(16px + var(--lyric-css-beat-glow)) var(--lyric-shadow-glow);
+    }
+    .desktop-lyric-translation{
+      display:block;
+      margin-top:.08em;
+      font-size:.52em;
+      font-weight:700;
+      line-height:1.08;
+      letter-spacing:normal;
+      color:var(--lyric-secondary);
+      -webkit-text-fill-color:var(--lyric-secondary);
+      opacity:.78;
+    }
     body.highlight .line{
       background:linear-gradient(90deg,
         var(--lyric-highlight) 0%,
@@ -256,7 +295,66 @@
       return Math.max(min, Math.min(max, n));
     }
     function normalizeRows(value) {
-      return String(value || '') === 'single' ? 'single' : 'double';
+      value = String(value || '');
+      return /^(single|double|triple|quad)$/.test(value) ? value : 'double';
+    }
+    function rowCountForMode(value) {
+      return { single:1, double:2, triple:3, quad:4 }[normalizeRows(value)] || 2;
+    }
+    function lyricStageGroups(items, fallbackText, rowMode) {
+      var limit = rowCountForMode(rowMode);
+      var groups = [];
+      var bySource = {};
+      (Array.isArray(items) ? items : []).forEach(function(item){
+        var key = String(item && item.sourceIndex != null ? item.sourceIndex : item && item.id || groups.length);
+        var group = bySource[key];
+        if (!group) {
+          group = bySource[key] = {
+            key:key,
+            role:item && item.role || 'future',
+            distance:Number(item && item.distance) || 0,
+            main:'',
+            translation:''
+          };
+          groups.push(group);
+        }
+        if (item && item.variant === 'translation') group.translation = String(item.text || '');
+        else if (!group.main) group.main = String(item && item.text || '');
+      });
+      groups = groups.filter(function(group){ return group.main || group.translation; });
+      if (!groups.length) {
+        groups = String(fallbackText || 'Mineradio').replace(/\r/g, '\n').split('\n').map(function(text, index){
+          return { key:'fallback-' + index, role:index ? 'future' : 'current', distance:index, main:text.trim(), translation:'' };
+        }).filter(function(group){ return group.main; });
+      }
+      if (groups.length > limit) {
+        var current = Math.max(0, groups.findIndex(function(group){ return group.role === 'current'; }));
+        var start = Math.max(0, Math.min(current - (limit >= 3 ? 1 : 0), groups.length - limit));
+        groups = groups.slice(start, start + limit);
+      }
+      return groups.slice(0, limit);
+    }
+    function renderLyricStage(items, fallbackText, rowMode) {
+      var groups = lyricStageGroups(items, fallbackText, rowMode);
+      line.replaceChildren();
+      groups.forEach(function(group){
+        var row = document.createElement('span');
+        row.className = 'desktop-lyric-row ' + (group.role || 'future');
+        var main = document.createElement('span');
+        main.className = 'desktop-lyric-main';
+        main.textContent = group.main || group.translation || '';
+        row.appendChild(main);
+        if (group.translation && group.translation !== group.main) {
+          var translation = document.createElement('span');
+          translation.className = 'desktop-lyric-translation';
+          translation.textContent = group.translation;
+          row.appendChild(translation);
+        }
+        line.appendChild(row);
+      });
+      line.setAttribute('data-text', groups.map(function(group){ return group.main; }).join('\n'));
+      state.renderedGroups = groups;
+      return groups.map(function(group){ return group.main + (group.translation ? '\n' + group.translation : ''); }).join('\n') || 'Mineradio';
     }
     function normalizeAlign(value) {
       var align = String(value || '');
@@ -579,7 +677,8 @@
     function measureLineWidth(fontSize) {
       ctx.save();
       ctx.font = state.fontWeight + ' ' + fontSize + 'px ' + state.fontFamily;
-      var rows = String(line.textContent || 'Mineradio').split(/\n/).filter(Boolean);
+      var rows = Array.from(line.querySelectorAll('.desktop-lyric-row')).map(function(row){ return row.innerText || row.textContent || ''; }).filter(Boolean);
+      if (!rows.length) rows = String(line.textContent || 'Mineradio').split(/\n/).filter(Boolean);
       if (!rows.length) rows = ['Mineradio'];
       var width = 1;
       rows.forEach(function(text){
@@ -590,7 +689,7 @@
       return Math.max(1, width);
     }
     function currentLyricLineCount() {
-      return Math.max(1, String(line.textContent || '').split(/\n/).filter(Boolean).length);
+      return Math.max(1, line.querySelectorAll('.desktop-lyric-row').length || String(line.textContent || '').split(/\n/).filter(Boolean).length);
     }
     function lyricScrollInitialHoldMs() {
       return Math.round(clamp(state.progressSpan * 130, 140, 520, 320));
@@ -749,12 +848,11 @@
       if (motion.beatGlow != null) state.beatGlow = motion.beatGlow;
       if (motion.beatPulse != null) state.beatPulse = motion.beatPulse;
       if (motion.bass != null) state.bass = motion.bass;
-      var text = String(state.text || 'Mineradio')
+      var incomingText = String(state.text || 'Mineradio')
         .replace(/\r/g, '\n')
         .split('\n')
         .map(function(line){ return line.replace(/[ \t]+/g, ' ').trim(); })
         .filter(Boolean)
-        .slice(0, normalizeRows(state.rows) === 'single' ? 1 : 2)
         .join('\n') || 'Mineradio';
       baseFontSize = Math.round(58 * clamp(state.size, .72, 1.55, 1));
       state.progress = clamp(state.progress, 0, 1, 0);
@@ -764,6 +862,9 @@
       state.letterSpacing = clamp(state.letterSpacing, -.04, .18, 0);
       state.lineHeight = clamp(state.lineHeight, .86, 1.35, 1);
       state.rows = normalizeRows(state.rows);
+      var renderKey = String(state.stageKey || '') + '|' + state.rows + '|' + incomingText;
+      var text = incomingText;
+      if (renderKey !== lastText) text = renderLyricStage(state.items, incomingText, state.rows);
       state.align = normalizeAlign(state.align);
       state.frameRate = normalizeFrameRate(state.frameRate);
       state.lyricGlowStrength = clamp(state.lyricGlowStrength, 0, .85, .35);
@@ -802,16 +903,14 @@
         hideInteractionHint();
         setPointerCapture(false);
       }
-      if (text !== lastText) {
-        lastText = text;
-        progressText = text;
+      if (renderKey !== lastText) {
+        lastText = renderKey;
+        progressText = renderKey;
         displayedProgress = state.progress;
         scrollState.offset = 0;
         scrollState.dir = -1;
         scrollState.holdUntil = performance.now() + lyricScrollInitialHoldMs();
         scrollState.lastAt = 0;
-        line.textContent = text;
-        line.setAttribute('data-text', text);
         layoutKey = '';
         replayLineAnimation();
       }
