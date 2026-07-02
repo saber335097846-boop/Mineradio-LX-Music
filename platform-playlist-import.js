@@ -409,6 +409,8 @@ function detect(input, preferredSource) {
   const source = normalizeSource(preferredSource);
 
   if (source === 'kgc') {
+    const pureConceptGCID = text.match(/^gcid_[a-z0-9]+$/i);
+    if (pureConceptGCID) return { source:'kgc', id:pureConceptGCID[0].toLowerCase(), input:text };
     const conceptId = extractKugouConceptIdentity(text);
     if (conceptId) return { source:'kgc', id:conceptId, input:text };
     if (extractKugouNormalIdentity(text)) throw new Error('这是普通小枸歌单链接，请选择“小枸”后再导入');
